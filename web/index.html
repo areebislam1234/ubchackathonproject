@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>StakeClash</title>
+    <link rel="stylesheet" href="/fonts/jersey-10/index.css" />
+    <link rel="stylesheet" href="/fonts/pixelify-sans/400.css" />
+    <link rel="stylesheet" href="/fonts/pixelify-sans/600.css" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <canvas id="world" aria-label="The world of StakeClash"></canvas>
+
+    <!-- Title / sign in -->
+    <section id="title" class="screen">
+      <div class="title-card panel wood">
+        <h1 class="logo" aria-label="StakeClash"><span>Stake</span><span>Clash</span></h1>
+        <p class="tagline">Find a sealed bounty. Out-fight the rival warlords.<br />Then call the real market hidden inside it.</p>
+        <div class="chips auth-tabs" role="tablist">
+          <button class="chip" role="tab" id="tab-signin" aria-pressed="true">Sign in</button>
+          <button class="chip" role="tab" id="tab-create" aria-pressed="false">New warlord</button>
+        </div>
+        <form id="login-form" autocomplete="on">
+          <label>Warlord name<input id="login-name" name="username" maxlength="20" required autocomplete="username" placeholder="Sir Hedge" /></label>
+          <label>Password
+            <span class="pw-row"><input id="login-pass" name="password" type="password" minlength="8" required autocomplete="current-password" /><button type="button" class="btn btn-small btn-ghost" id="pw-toggle" aria-pressed="false">Show</button></span>
+          </label>
+          <label id="confirm-row" hidden>Confirm password<input id="login-pass2" name="password2" type="password" minlength="8" autocomplete="new-password" /></label>
+          <p class="auth-hint" id="auth-hint">Welcome back, warlord.</p>
+          <button class="btn btn-go btn-big" type="submit" id="login-submit">Enter the realm</button>
+        </form>
+        <p class="fine">Practice gold only. Odds come from live Gemini prediction markets. Badges mint to your Solana wallet.</p>
+      </div>
+      <div id="loading" class="loading" hidden><div class="panel dark"><span id="loading-text">Forging the world…</span></div></div>
+    </section>
+
+    <!-- HUD -->
+    <section id="hud" hidden>
+      <button id="hud-chief" class="chief panel wood" aria-label="Open your profile">
+        <span class="keep-badge" id="hud-keep">1</span>
+        <span class="chief-text"><b id="hud-name">Warlord</b><span id="hud-trophies" class="trophies"></span></span>
+      </button>
+      <div class="resources">
+        <div class="res gold" title="Gold"><span class="res-icon" data-icon="coin"></span><span class="bar"><i id="gold-fill"></i></span><b id="gold-val">0</b></div>
+        <div class="res crystal" title="Crystals: earned only from well-calibrated predictions"><span class="res-icon" data-icon="crystal"></span><b id="crystal-val">0</b></div>
+      </div>
+      <div class="minimap panel stone">
+        <canvas id="minimap" width="168" height="168" aria-label="Minimap"></canvas>
+        <div class="mm-realm" id="mm-realm">Crownlands</div>
+      </div>
+      <div id="realm-title" class="realm-title" aria-live="polite"></div>
+      <div id="prompt" class="prompt panel dark" hidden></div>
+      <div id="recall" class="recall panel dark" hidden><span id="recall-text">Recalling home…</span><span class="recall-bar"><i id="recall-fill"></i></span></div>
+      <div class="ticker panel dark" aria-live="polite"><span class="ticker-label">On-chain feed</span><span id="ticker-text">Listening to the realm…</span></div>
+      <nav class="dock" aria-label="Main">
+        <button class="dock-btn" id="btn-home" data-key="H" title="Recall to your fortress"><span class="dock-icon" data-icon="flag"></span><span>Home</span><kbd>H</kbd></button>
+        <button class="dock-btn" id="btn-map" data-key="M"><span class="dock-icon" data-icon="map"></span><span>Map</span><kbd>M</kbd></button>
+        <button class="dock-btn" id="btn-fortress" data-key="F"><span class="dock-icon" data-icon="castle"></span><span>Fortress</span><kbd>F</kbd></button>
+        <button class="dock-btn" id="btn-army" data-key="R"><span class="dock-icon" data-icon="helmet"></span><span>Army</span><kbd>R</kbd></button>
+        <button class="dock-btn" id="btn-profile" data-key="P"><span class="dock-icon" data-icon="person"></span><span>Profile</span><kbd>P</kbd></button>
+        <button class="dock-btn" id="btn-dev" data-key="`" hidden title="Dev tools for demos"><span class="dock-icon" data-icon="bolt"></span><span>Dev</span><kbd>`</kbd></button>
+        <button class="dock-btn small" id="btn-sound" aria-pressed="true" title="Sound"><span id="sound-label">♪</span></button>
+      </nav>
+      <div class="help-hint" id="help-hint">WASD / arrows or click to walk · E to interact · H to go home · scroll to zoom · drag to look around</div>
+    </section>
+
+    <!-- Overlays -->
+    <section id="mapview" class="overlay" hidden aria-label="World map"></section>
+    <section id="sheet" class="overlay" hidden><div class="sheet panel parchment" role="dialog" aria-modal="true"><button class="close-x" id="sheet-close" aria-label="Close">✕</button><div id="sheet-body"></div></div></section>
+    <section id="battle" class="overlay battle-overlay" hidden aria-label="Battle"></section>
+    <div id="toasts" aria-live="polite"></div>
+
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>
