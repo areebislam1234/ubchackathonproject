@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>StakeClash sprite sheet</title>
+<style>body{background:#2a2240;color:#fff;font:12px monospace;margin:12px} .s{display:inline-block;margin:6px;text-align:center;vertical-align:bottom} canvas{image-rendering:pixelated;display:block;margin:auto;background:#5fb83f}</style></head>
+<body><div id="out"></div>
+<script type="module">
+import { SPRITES } from "/shared/sprites.js";
+import { spriteCanvas } from "/js/gfx.js";
+const out = document.getElementById("out");
+const scale = Number(new URLSearchParams(location.search).get("scale") || 3);
+const filter = new URLSearchParams(location.search).get("only");
+for (const name of Object.keys(SPRITES)) {
+  if (filter && !name.match(filter)) continue;
+  const src = spriteCanvas(name);
+  const c = document.createElement("canvas");
+  c.width = src.width * scale; c.height = src.height * scale;
+  const ctx = c.getContext("2d"); ctx.imageSmoothingEnabled = false; ctx.drawImage(src, 0, 0, c.width, c.height);
+  const d = document.createElement("div"); d.className = "s"; d.append(c, name); out.append(d);
+}
+</script></body></html>
