@@ -322,7 +322,9 @@ let running = false;
 function kick() {
   if (mode !== "chain" || running) return;
   running = true;
-  drain().finally(() => (running = false));
+  drain()
+    .catch((e) => console.warn(`on-chain sender: ${(e as Error)?.message ?? e}`))
+    .finally(() => (running = false));
 }
 
 async function drain() {
@@ -390,7 +392,7 @@ async function build(item: QueueItem, a: Address, m: P.Mints) {
     case "convert": return [await P.convertYieldIx(a, m, w!, x.usdc, x.might)];
     case "stake": return [await P.escrowStakeIx(a, x.mint === "gold" ? m.gold : m.might, x.mint === "gold", w!, x.id, x.amount, x.memo)];
     case "release": return [await P.releaseStakeIx(a, x.mint === "gold" ? m.gold : m.might, x.mint === "gold", x.id, keyOf(x.to), x.pay, x.burn, x.memo)];
-    case "battle": return [await P.resolveBattleIx(a, x.kind, x.context, x.attacker, x.defender, x.atk ? keyOf(x.atk) : null, x.def ? keyOf(x.def) : null)];
+    case "battle": return [P.computeUnitLimitIx(1_400_000), await P.resolveBattleIx(a, x.kind, x.context, x.attacker, x.defender, x.atk ? keyOf(x.atk) : null, x.def ? keyOf(x.def) : null)];
   }
   return null;
 }
@@ -411,7 +413,7 @@ async function indexTick() {
     await backfill();
     await finalize();
     await refreshSupply(s.mints);
-    if (!unwatch && s.mints) unwatch = await watchMints(s.mints);
+    if (!unwatch && s.mints) unwatch = await watchMints(s.mints, () => (unwatch = null));
   } catch (e) {
     console.warn(`indexer: ${(e as Error).message}`);
   }

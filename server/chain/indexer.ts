@@ -113,18 +113,38 @@ export async function refreshSupply(mints: { gold: string; might: string } | nul
   db.save();
 }
 
-/** QuickNode WebSocket: refresh supply whenever a mint account changes. */
-export async function watchMints(mints: { gold: string; might: string }) {
+/**
+ * QuickNode WebSocket: refresh supply whenever a mint account changes. Sockets drop (hosts and RPC
+ * providers close idle connections), so a closed or failed stream is logged and `onEnd` lets the
+ * caller re-subscribe; the 60-second supply poll covers the gap. It must never throw unhandled.
+ */
+export async function watchMints(mints: { gold: string; might: string }, onEnd: () => void = () => {}) {
   const wsUrl = process.env.SOLANA_WS_URL ?? solanaRpcUrl.replace(/^http/, "ws");
   const subs = createSolanaRpcSubscriptions(wsUrl);
   const abort = new AbortController();
+  let ended = false;
+  const end = (why: string) => {
+    if (ended) return;
+    ended = true;
+    if (!abort.signal.aborted) console.warn(`indexer: mint watch stopped (${why}); will re-subscribe`);
+    abort.abort();
+    onEnd();
+  };
   for (const mint of [mints.gold, mints.might]) {
     const stream = await subs.accountNotifications(mint as Address, { commitment: "confirmed", encoding: "base64" }).subscribe({ abortSignal: abort.signal });
     void (async () => {
-      for await (const _ of stream) await refreshSupply(mints).catch(() => {});
+      try {
+        for await (const _ of stream) await refreshSupply(mints).catch(() => {});
+        end("closed");
+      } catch (e) {
+        end((e as Error)?.message ?? String(e));
+      }
     })();
   }
-  return () => abort.abort();
+  return () => {
+    ended = true;
+    abort.abort();
+  };
 }
 
 // ── Derived views ─────────────────────────────────────────────────────

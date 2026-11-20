@@ -206,6 +206,7 @@ export type Duel = {
   id: string;
   createdAt: number;
   status: "open" | "fighting" | "fought" | "settled" | "cancelled";
+  fightingSince?: number; // set while the chain decides the fight; a stale one is recovered
   stake: number; // Might each side put up
   market: string;
   question: string;

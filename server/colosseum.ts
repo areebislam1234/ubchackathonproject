@@ -25,6 +25,28 @@ import { GameError, award, boostsOf, vigorOf } from "./players";
 import * as chain from "./chain/onchain";
 import { runBattle, stamp, verifyAgainstChain, type Decision } from "./chain/arbiter";
 
+/** A duel still "fighting" after this long lost its decision (a failed send or a restart): reopen it. */
+const STUCK_MS = Number(process.env.DUEL_STUCK_MS ?? 120_000);
+const stuck = (d: Duel) => d.status === "fighting" && now() - (d.fightingSince ?? 0) > STUCK_MS;
+
+/** Undo an answer that was never fought: the rival's stake goes back and the challenge reopens. */
+function reopen(d: Duel, why: string) {
+  if (d.status !== "fighting") return false;
+  const r = d.rival;
+  const rp = r ? db.data.players[r.playerId] : null;
+  if (rp && !rp.bot && d.stake) {
+    rp.might = (rp.might ?? 0) + d.stake;
+    chain.onRelease(potKeys(d)[1], rp, d.stake, 0, `duel:${d.id}:cancel`);
+  }
+  d.status = "open";
+  d.rival = undefined;
+  delete d.fightingSince;
+  if (r?.bot || !rp) d.botAt = now() + COLOSSEUM.botAcceptSec * 1000;
+  console.warn(`colosseum: ${d.id} reopened (${why})`);
+  db.save();
+  return true;
+}
+
 const potKeys = (d: Duel) => [`duel:${d.id}:c`, `duel:${d.id}:r`];
 
 const MEMO = "stakeclash:v1";
@@ -175,23 +197,19 @@ export async function acceptChallenge(p: Player, id: string, body: any) {
   postReceipt(d.rival.receipt!);
   // the chain decides the fight; while it does, nobody else can answer this challenge
   d.status = "fighting";
+  d.fightingSince = now();
   return runBattle(
     duelInput(d),
     (dec) => {
+      if (d.status !== "fighting" || d.rival?.playerId !== p.id) throw new GameError("This duel was reopened while Solana was deciding. Nothing was applied.");
       const rec = fight(d, dec);
       p.lastCombatAt = now();
       return remember(p, rid, { duel: duelView(d, p), battle: rec, might: p.might });
     },
     {
       lockPlayer: p,
-      onCancel: () => {
-        // the chain never decided: give the stake back and reopen the challenge
-        d.status = "open";
-        d.rival = undefined;
-        p.might = (p.might ?? 0) + d.stake;
-        chain.onRelease(potKeys(d)[1], p, d.stake, 0, `duel:${d.id}:cancel`);
-        db.save();
-      },
+      // the chain never decided: give the stake back and reopen the challenge (once)
+      onCancel: (why) => void reopen(d, why),
     },
   );
 }
@@ -207,6 +225,9 @@ function duelInput(d: Duel) {
 export function cancelChallenge(p: Player, id: string) {
   const d = duels()[id];
   if (!d || d.challenger.playerId !== p.id) throw new GameError("No such challenge of yours.", 404);
+  // a fight whose decision never came back can be cancelled once it is clearly stuck
+  if (stuck(d)) reopen(d, "cancelled by the challenger after it got stuck");
+  if (d.status === "fighting") throw new GameError("This duel is being decided on Solana right now. If it doesn't finish within 2 minutes you can cancel it.");
   if (d.status !== "open") throw new GameError("This duel has already been fought.");
   d.status = "cancelled";
   p.might = (p.might ?? 0) + d.stake;
@@ -353,14 +374,15 @@ function botAccept(d: Duel) {
   d.rival.bot = true;
   postReceipt(d.rival.receipt!);
   d.status = "fighting";
-  const run = runBattle(duelInput(d), (dec) => fight(d, dec), {
-    onCancel: () => {
-      d.status = "open";
-      d.rival = undefined;
-      d.botAt = now() + COLOSSEUM.botAcceptSec * 1000;
-      db.save();
+  d.fightingSince = now();
+  const run = runBattle(
+    duelInput(d),
+    (dec) => {
+      if (d.status !== "fighting") throw new GameError("This duel was reopened while Solana was deciding.");
+      return fight(d, dec);
     },
-  });
+    { onCancel: (why) => void reopen(d, why) },
+  );
   if (run instanceof Promise) run.catch(() => {});
   return true;
 }
@@ -370,6 +392,8 @@ export const botStyle = (bot: { id: string }) => (strSeed(bot.id) % 2 ? "momentu
 let lastSettle = 0;
 let busy = false;
 export async function colosseumTick(force = false) {
+  // recover duels whose decision was lost (a failed send, or a restart mid-wait)
+  for (const d of Object.values(duels())) if (stuck(d)) reopen(d, "the decision never came back");
   for (const d of Object.values(duels())) if (d.status === "open" && d.botAt && now() >= d.botAt) {
       try {
         botAccept(d);

@@ -39,6 +39,9 @@ export async function api(path, { method = "GET", body } = {}) {
     saveToken(null);
     session.onLogout();
   }
-  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    if (!json.error && [502, 503, 504].includes(res.status)) throw new Error("The game server is restarting or unreachable. Try again in a moment.");
+    throw new Error(json.error || `Request failed (${res.status})`);
+  }
   return json;
 }

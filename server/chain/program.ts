@@ -180,6 +180,15 @@ function ix(name: string, args: Schema, values: any, metas: Meta[]): Instruction
 
 export type Mints = { gold: Address; might: Address };
 
+/** ComputeBudget SetComputeUnitLimit: a battle runs the whole engine on-chain, past the 200k default. */
+export const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111" as Address;
+export function computeUnitLimitIx(units: number): Instruction {
+  const data = Buffer.alloc(5);
+  data.writeUInt8(2, 0);
+  data.writeUInt32LE(units, 1);
+  return { programAddress: COMPUTE_BUDGET, accounts: [], data };
+}
+
 /** One-time setup after deploy: the config PDA and the Gold and Might mints (fresh keypairs, signers). */
 export async function initializeIx(authority: Address, goldMint: Address, mightMint: Address) {
   return ix("initialize", [], {}, [[authority, "ws"], [await configPda(), "w"], [goldMint, "ws"], [mightMint, "ws"], [TOKEN_PROGRAM, "r"], [SYSTEM_PROGRAM, "r"], [RENT_SYSVAR, "r"]]);

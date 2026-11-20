@@ -494,6 +494,11 @@ app.use("/fonts", express.static(path.join(ROOT, "node_modules", "@fontsource"))
 app.use(express.static(path.join(ROOT, "web")));
 app.use("/api", (_req, res) => void res.status(404).json({ error: "not found" }));
 
+// A stray promise rejection or exception (a dropped WebSocket, a failed send) must never take the
+// server down: on a host every request would answer 502 while it restarts. Log it and keep serving.
+process.on("unhandledRejection", (e) => console.error("unhandled rejection:", (e as Error)?.stack ?? e));
+process.on("uncaughtException", (e) => console.error("uncaught exception:", e?.stack ?? e));
+
 const refunded = refundMastery();
 startOnchain();
 if (refunded) console.log(`Mastery became abilities: refunded Might to ${refunded} player(s)`);

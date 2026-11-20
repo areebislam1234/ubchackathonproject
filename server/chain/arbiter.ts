@@ -33,6 +33,8 @@ export type Decision = { seed: number; chain: ChainInfo | null; levels?: { attac
 
 const TIMEOUT_MS = Number(process.env.CHAIN_BATTLE_TIMEOUT_MS ?? 12_000);
 const SIM_DELAY_MS = Number(process.env.CHAIN_SIMULATE_DELAY_MS ?? 1500);
+/** After this long the game gives up on the chain: nothing is applied and stakes are refunded. */
+const DEADLINE_MS = Number(process.env.CHAIN_BATTLE_DEADLINE_MS ?? 90_000);
 
 export const arbiterMode = (): "chain" | "simulate" | "local" => (process.env.CHAIN_PROGRAM === "simulate" ? "simulate" : chainMode().mode === "chain" ? "chain" : "local");
 
@@ -42,6 +44,9 @@ const human = (p?: Player | null) => (p && !p.bot ? p : null);
 async function decideOnChain(input: BattleInput): Promise<Decision> {
   if (arbiterMode() === "simulate") {
     await new Promise((r) => setTimeout(r, SIM_DELAY_MS));
+    // test switches for the failure paths: a transaction that fails, or one that never lands
+    if (process.env.CHAIN_SIMULATE_FAIL === "fail") throw new GameError("The battle transaction failed on Solana. Nothing was applied; try again.");
+    if (process.env.CHAIN_SIMULATE_FAIL === "hang") await new Promise(() => {});
     const fakeHash = crypto.randomBytes(32);
     const seq = ((db.data as any).simBattleSeq = ((db.data as any).simBattleSeq ?? 0) + 1);
     const seed = (fakeHash.readUInt32LE(0) ^ seq) >>> 0;
@@ -111,7 +116,13 @@ export function runBattle<T>(input: BattleInput, apply: (d: Decision) => T, opts
 
   if (lock) inFlight.add(lock);
   const id = `PB-${crypto.randomBytes(6).toString("hex")}`;
-  const job = decideOnChain(input)
+  let deadline: NodeJS.Timeout;
+  const late = new Promise<never>((_, rej) => {
+    deadline = setTimeout(() => rej(new GameError("Solana didn't decide this battle in time. Nothing was applied, and any stake is back with you. Try again.")), DEADLINE_MS);
+  });
+  // a decision that lands after the deadline is ignored: the race has already moved on
+  const job = Promise.race([decideOnChain(input), late])
+    .finally(() => clearTimeout(deadline))
     .then((d) => apply(d))
     .catch((e) => {
       opts.onCancel?.((e as Error).message);
