@@ -169,19 +169,14 @@ function arenaTab(G) {
       <button class="btn btn-small btn-go" id="d-colo">Open the Colosseum</button>
     </div>
     <p class="note">Rivals also answer on their own after a short wait. Settle a fought duel's market from its card in My duels (mock Gemini only).</p>
-    <h3>Vault</h3>
+    <h3>SOL vault</h3>
     <div class="row" style="flex-wrap:wrap">
-      <input id="d-coin" value="SOL" maxlength="12" aria-label="Coin" style="width:5em">
-      <button class="btn btn-small btn-gold" data-coinpct="5">+5% (demo price)</button>
-      <button class="btn btn-small btn-blue" data-coinpct="-5">−5%</button>
-      <button class="btn btn-small btn-ghost" id="d-sol-live">All back to Gemini's live prices</button>
-    </div>
-    <div class="row" style="flex-wrap:wrap">
-      <button class="btn btn-small btn-gold" id="d-usdc">+100 test USDC in my vault</button>
-      <button class="btn btn-small btn-go" id="d-testtoken">Send me a test token (any-token deposits)</button>
+      <button class="btn btn-small btn-gold" data-solpct="5">SOL +5% (demo price)</button>
+      <button class="btn btn-small btn-blue" data-solpct="-5">SOL −5%</button>
+      <button class="btn btn-small btn-ghost" id="d-sol-live">Back to Gemini's live price</button>
       <button class="btn btn-small btn-go" id="d-vault">Open the vault</button>
     </div>
-    <p class="note">A demo price replaces Gemini's live price for that coin everywhere until you go back to live. Vaults are revalued at once, so a rise pays holding Might right away. The test token is a new Solana token with no market price: deposit it from the Vault to show it lands as an unpriced holding.</p>
+    <p class="note">A demo price replaces Gemini's live SOL/USD everywhere until you go back to live. Vaults are revalued at once, so a rise pays Might right away.</p>
     <h3>Odds and the town crier</h3>
     <div class="row" style="flex-wrap:wrap">
       <button class="btn btn-small btn-gold" data-shock="0.18">Jolt a random market up</button>
@@ -327,25 +322,14 @@ function wire(G, body) {
   });
   on("#d-colo", async () => G.openColosseum({ tab: "mine" }));
   on("#d-odds", async () => G.openOdds());
-  each("[data-coinpct]", async (b) => {
-    const coin = (body.querySelector("#d-coin")?.value || "SOL").trim().toUpperCase();
-    const r = await api("/api/dev/price", { body: { coin, pct: Number(b.dataset.coinpct) } });
+  each("[data-solpct]", async (b) => {
+    const r = await api("/api/dev/sol-price", { body: { pct: Number(b.dataset.solpct) } });
     await G.refreshMe();
-    const px = r.price?.usd ?? r.price?.mid;
-    toast(px ? `${coin} demo price: $${Number(px).toLocaleString("en-US", { maximumFractionDigits: 6 })}` : `No price for ${coin}.`, "gold");
-  });
-  on("#d-usdc", async () => {
-    await api("/api/dev/usdc", { body: { usdc: 100 } });
-    await G.refreshMe();
-    toast("100 test USDC added to your vault.", "good");
-  });
-  on("#d-testtoken", async () => {
-    const r = await api("/api/dev/test-token", { body: {} });
-    toast(`1,000 test tokens sent to your wallet (mint ${r.mint.slice(0, 4)}…). Deposit them from the Vault.`, "good");
+    toast(`SOL demo price: $${r.price.usd.toFixed(2)}`, "gold");
   });
   on("#d-sol-live", async () => {
     const r = await api("/api/dev/sol-price", { body: { live: true } });
-    toast(r.price ? `Back to live prices (SOL $${r.price.usd.toFixed(2)})` : "Back to live (no price reachable right now).", "good");
+    toast(r.price ? `Live SOL price: $${r.price.usd.toFixed(2)}` : "Back to live (no price reachable right now).", "good");
   });
   on("#d-vault", async () => G.openVault());
   each("[data-shock]", async (b) => {
