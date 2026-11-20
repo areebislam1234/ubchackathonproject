@@ -4,7 +4,7 @@ An 8-bit strategy game built on real prediction markets. Explore a huge world fo
 
 ![The world](docs/world.png)
 
-Built for UBC 2026 from our design doc. Its three technologies each have a distinct job: Solana for ownership and verifiable records, Gemini for market data, and QuickNode Streams for blockchain events.
+Built for UBC 2026 from our design doc. Its three technologies each have a distinct job: Solana for ownership and verifiable records, Gemini for market data, and QuickNode Streams for blockchain events. See [How StakeClash uses Solana](#how-stakeclash-uses-solana) (with every program ID) and [How StakeClash uses Gemini](#how-stakeclash-uses-gemini-prediction-markets).
 
 ---
 
@@ -94,6 +94,56 @@ Rarity sets the depth: a common report has one section, a legendary one has ever
 
 **QuickNode** is used for blockchain data only. Besides the game's own transactions, the Stream filter now summarises one block in every 50 slots (transactions, failure rate, busiest programs, watched-token transfers). The server stores those samples deduplicated by slot, after the same HMAC check. Crypto reports combine them with throughput, epoch and fee data from the QuickNode RPC endpoint. On devnet without a Stream, `USE_LOCAL_STREAM=1` samples blocks the same way.
 
+## The Colosseum (K)
+
+1v1 duels for Might on a **live Gemini market**. Both warlords put up the same Might, send an army, and make a call (YES/NO and how sure they are) on the same market.
+
+1. **Issue a challenge.** Pick an open market (each shows its live odds, last-hour move and a chart), make your call, choose a stake and an army. The stake is held in escrow.
+2. **Your call is committed on Solana at once**, before anyone fights. The game posts a memo `stakeclash:v1:call:<duel>:<player>:<sha256>`, where the hash covers the duel, player, market, side, confidence, **the Gemini price at that moment**, the time and a random salt. Your rival sees only the hash.
+3. **Answer a challenge.** Another warlord (or, after 25 seconds, a rival warlord bot with its own trading style: momentum or contrarian) answers with their army and their own committed call.
+4. **Steel.** The armies fight at once in the deterministic battle simulator; the replay is the fight that scored. The winner takes the **steel half** of the pot. Arena fights are to first blood: no units are lost.
+5. **Foresight.** The other half waits for Gemini to settle the market, then goes to the **better-calibrated call** (lower Brier score). Equal calls split it. 5% of each pot is burned so Might doesn't inflate.
+6. **Sealed result.** On settlement the full result (both calls with their salts, the battle seed and winner, the outcome and payouts) is hashed and posted as `stakeclash:v1:duel:<duel>:<sha256>`.
+
+After the fight, both calls are revealed in **My duels → How to verify**, so anyone can recompute each hash and compare it with the memo on Solana. That proves the call, and the odds it was made at, were fixed before the fight. QuickNode Streams delivers each memo back to the game, which marks the receipt **On Solana ✓** only when the hash on-chain matches. The first steel win earns the **Gladiator** badge (Token-2022, like the others).
+
+## Odds board and the town crier (O)
+
+Gemini's prediction-markets REST API returns current prices but no odds history, so **the server records it**: every open market's mid price is sampled (every 10 s with mock Gemini, 60 s live; `ODDS_SAMPLE_SECONDS`) and kept for 24 hours in `.data/<network>/odds.json`.
+
+- **Odds board (O):** the biggest movers over 15 min / 1 h / 6 h / 24 h with sparklines, and a full pixel chart per market with high, low, change and a plain-English line ("YES trades at 62¢, so the market puts this at about a 62% chance").
+- **Charts in context:** a revealed bounty question shows how its odds moved over the last 6 hours; every intelligence report about a market shows its last 24 hours.
+- **The town crier:** when a market moves sharply (8¢ in 10 min with mock Gemini, 4¢ in an hour live), a headline goes up in the realm feed and as a toast for every player ("odds on “BTC above $100,000” jumped from 41¢ to 55¢"). Click the ticker to open that market's chart.
+- **Hot bounties:** a sharp move can stir up the market's realm: a featured bounty around that market appears there, its question sealed like any other.
+- **Duel from any chart:** "Duel on this market in the Colosseum" opens a challenge with that market picked.
+
+## How StakeClash uses Solana
+
+Everything on-chain uses existing Solana programs; StakeClash deploys no program of its own.
+
+| Program | ID | What StakeClash does with it |
+|---|---|---|
+| SPL Token-2022 | `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | Each badge (First Blood, Boss Slayer, Gladiator…) is its own mint with the **MetadataPointer** and **TokenMetadata** extensions: name, symbol and image live on the mint. One badge is minted to a player's wallet when earned. |
+| SPL Token | `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` | **Devnet USDC** (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, Circle's devnet mint) for Treasury deposits and withdrawals |
+| Associated Token Account | `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` | Creates each player's badge and USDC accounts (idempotent) |
+| Memo (v3) | `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` | Verifiable records: badge mints, sealed bounty standings, **Colosseum odds receipts** (committed calls) and sealed duel results, withdrawals |
+| System | `11111111111111111111111111111111` | Accounts for mints; fees are paid by the game authority |
+
+- **Solana Pay:** Treasury deposits are Solana Pay transfer links with a reference key, so Phantom can pay devnet USDC straight into the game.
+- **Wallets:** an in-game Ed25519 wallet (no install), Phantom, MetaMask's Solana account, any Wallet Standard wallet (Solflare, Backpack…), or a pasted address. Linking is a signed message, checked on the server.
+- **QuickNode Streams** watches the chain and posts the game's transactions to `/webhooks/quicknode` (HMAC-verified, de-duplicated by signature). That's how badges become "On Solana", standings and duel results become verified, Colosseum receipts get their ✓, and deposits are credited exactly once.
+- `npm run setup-solana` prints the authority address and every badge mint for your network; `/api/config` and `/api/health` list them too.
+
+## How StakeClash uses Gemini prediction markets
+
+| Endpoint | Used for |
+|---|---|
+| `GET /v1/prediction-markets/events?status=active` | Every open market: bounties spawn from them by category, the Colosseum lists them, and the server samples their prices for odds history, movers and the town crier |
+| `GET /v1/prediction-markets/events/{ticker}` | Looking up one market's contract and live bid/ask (calls in bounties and duels are priced from it) |
+| `GET /v1/prediction-markets/events/recently-settled` | Settling bounty predictions and Colosseum duels with Gemini's own resolution |
+
+Markets are always keyed by Gemini's `instrumentSymbol`. YES is bought at the ask, NO at 1 − bid; payouts are stake ÷ price, and calibration is scored with the Brier score. `GEMINI_MODE=mock` runs a local server with the same endpoints (plus settle and jolt buttons for demos).
+
 ## Wallets
 
 Badges need a Solana wallet to mint to. **Profile → Solana wallet** offers four ways, so nobody has to install anything:
@@ -102,6 +152,7 @@ Badges need a Solana wallet to mint to. **Profile → Solana wallet** offers fou
 |---|---|
 | **In-game wallet** (no install) | A keypair made in your browser with built-in Ed25519 crypto and kept there. **Back up key** shows it in the format Phantom and Solflare import ("Import private key"). **I have a key** restores it in another browser. |
 | **Phantom** | Connects the Phantom extension or app. |
+| **MetaMask** | Connects MetaMask's built-in Solana account (found through the Wallet Standard). |
 | **Other Solana wallets** | Solflare, Backpack and any wallet that supports the Solana Wallet Standard are detected automatically. |
 | **Just an address** | Paste any Solana address (hardware, mobile, exchange). It's receive-only and marked unverified. |
 
@@ -131,7 +182,7 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
   - Inside a bounty sheet the same start, end and settle buttons appear.
   - The panel is on by default. Set `DEV_TOOLS=off` in `.env` before sharing the game publicly.
 - **Progress** is saved in `.data/local`. `npm run dev -- --fresh` starts over.
-- **Tests:** `npm test` runs 104 end-to-end checks on a separate stack, so it never touches your game.
+- **Tests:** `npm test` runs 133 end-to-end checks on a separate stack, so it never touches your game.
 
 ## 3-minute demo
 
@@ -142,7 +193,9 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
 5. **Attack** the guardian, show the counters hint, and watch the replay. The score lands on the leaderboard.
 6. **Demo tools → End battles now.** The question is revealed with Gemini's live odds. Make a call at 70% with a stake and read the coach line aloud.
 7. **Settle YES.** The payout, Crystals and Oracle badge arrive. Open **Profile → Trophy Room** and click **Create an in-game wallet**: one click, nothing to install. Watch the badges flip to **On Solana** as Stream deliveries arrive. Mention the sealed-standings hash at the bottom of the bounty.
-8. **Home.** Press **H**. You can't recall straight after a battle ("still in combat"); wait 30 seconds, recall, then open your fortress, where Crystals raise the Keep and the courtyard visibly grows.
+8. **Odds board (O).** Show the biggest movers and open one market's chart. Dev → **Arena & odds → Jolt a market**: the town crier shouts about it and the chart jumps.
+9. **Colosseum (K).** From that chart press **Duel on this market**. Make a call, stake some Might (Dev → +1,000 Might), issue the challenge, and point at "Posting to Solana…" turning into **On Solana ✓**. Dev → **A rival answers now**, watch the fight, then **Dev: settle YES** on the duel card and open **How to verify**.
+10. **Home.** Press **H**. You can't recall straight after a battle ("still in combat"); wait 30 seconds, recall, then open your fortress, where Crystals raise the Keep and the courtyard visibly grows.
 
 ---
 
@@ -161,6 +214,8 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
 | Fortress: Keep, Barracks, Training Grounds, Storage, Defenses, Trophy Room | Your fortress stands on the world map (recall with **H**). `web/js/screens/fortress.js`; Watchtowers really do defend you in battle. |
 | Player profile: username, wallet, level, histories, achievements | Password accounts, log out, wallet link, record, history, Trophy Room, rankings |
 | Army: Infantry, Archers, Tanks, Cavalry, Siege | Unlocks, levels, capacity, counters (`shared/rules.js`) |
+| Analytics: odds over time, movers | `server/odds.ts` records Gemini prices; the odds board, bounty and intel charts (`web/js/odds-chart.js`, `web/js/screens/odds.js`) |
+| PvP with market calls, verifiable on-chain | The Colosseum (`server/colosseum.ts`, `web/js/screens/colosseum.js`): commit-reveal odds receipts in Solana memos, sealed results |
 | Off-chain vs on-chain split (doc 5.3) | Movement, battles and economy are off-chain. Badges and sealed results are on-chain. |
 
 ## Architecture
@@ -242,7 +297,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | Command | Does |
 |---|---|
 | `npm run dev` | Runs everything for the current `NETWORK` (`-- --fresh` wipes local progress) |
-| `npm test` | 104 end-to-end checks on an isolated stack |
+| `npm test` | 133 end-to-end checks on an isolated stack |
 | `npm run setup-solana` | Creates the authority and funds it if possible, then creates the badge mints |
 | `npm run print-filter` | Writes the QuickNode filter with your addresses filled in |
 | `npm run world-preview` | Renders the generated world to `docs/world-map.png` |
@@ -255,6 +310,8 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | `shared/` | World generator, pixel-art sprites, battle simulator and game rules. These are the same files in the browser and on the server. |
 | `server/` | API, bounty director, players and economy, boss lairs and loot (`bosses.ts`), JSON database, Solana (`chain/solana.ts`), Stream handling (`chain/stream.ts`) |
 | `server/funds.ts`, `server/chain/usdc.ts` | The yield economy: ledger, trades, conversion, Mastery, USDC deposits and withdrawals |
+| `server/odds.ts` | Odds history from Gemini prices, movers, the town crier, hot bounties |
+| `server/colosseum.ts` | Colosseum duels: escrow, the fight, foresight settlement, odds receipts and sealed results |
 | `server/intel/` | Intelligence reports: market selection, scenario parsing, the data providers and report assembly |
 | `localchain/` | The local Solana RPC (LiteSVM) and the stream relay |
 | `gemini/` | Gemini client and a mock server with the same endpoints |

@@ -21,12 +21,13 @@ export async function openDev(G) {
     ["world", "World"],
     ["bounties", "Bounties"],
     ["bosses", "Bosses"],
+    ["arena", "Arena & odds"],
   ];
   const html = `
     <h2>Dev tools</h2>
     <p class="sub">For demos. Changes apply to your warlord instantly. Turn this panel off with <code>DEV_TOOLS=off</code> before sharing the game publicly.</p>
     <div class="chips" style="margin-bottom:12px">${tabs.map(([k, l]) => `<button class="chip" data-tab="${k}" aria-pressed="${tab === k}">${l}</button>`).join("")}</div>
-    <div id="dtab">${tab === "warlord" ? warlordTab(G) : tab === "world" ? worldTab(G) : tab === "bosses" ? bossesTab(G) : await bountiesTab(G)}</div>`;
+    <div id="dtab">${tab === "warlord" ? warlordTab(G) : tab === "world" ? worldTab(G) : tab === "bosses" ? bossesTab(G) : tab === "arena" ? arenaTab(G) : await bountiesTab(G)}</div>`;
   const body = openSheet("dev", html);
   for (const b of body.querySelectorAll("[data-tab]"))
     b.addEventListener("click", () => {
@@ -159,6 +160,24 @@ function bossesTab(G) {
       .join("")}</tbody></table>`;
 }
 
+function arenaTab(G) {
+  return `
+    <h3>Colosseum</h3>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn btn-small btn-crystal" id="d-might1k">+1,000 Might</button>
+      <button class="btn btn-small btn-fight" id="d-duelbot">A rival answers my open challenges now</button>
+      <button class="btn btn-small btn-go" id="d-colo">Open the Colosseum</button>
+    </div>
+    <p class="note">Rivals also answer on their own after a short wait. Settle a fought duel's market from its card in My duels (mock Gemini only).</p>
+    <h3>Odds and the town crier</h3>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn btn-small btn-gold" data-shock="0.18">Jolt a random market up</button>
+      <button class="btn btn-small btn-blue" data-shock="-0.18">Jolt a random market down</button>
+      <button class="btn btn-small btn-go" id="d-odds">Open the odds board</button>
+    </div>
+    <p class="note">${G.cfg.mockGemini ? "Mock Gemini only: moves a market's odds right away, so the movers board, the charts and the town crier react (and a featured bounty may appear)." : "Jolting only works with mock Gemini; live markets move on their own."}</p>`;
+}
+
 function teleport(G, x, y) {
   G.view.teleport(x, y);
   closeSheet();
@@ -281,6 +300,23 @@ function wire(G, body) {
     await api("/api/dev/boss-cooldowns", { body: {} });
     await G.refreshLairs();
     toast("Every boss is back in its lair.", "good");
+  });
+  // arena & odds
+  on("#d-might1k", async () => {
+    await api("/api/dev/usdc", { body: { might: (G.me.might ?? 0) + 1000 } });
+    await G.refreshMe();
+    toast("+1,000 Might.", "good");
+  });
+  on("#d-duelbot", async () => {
+    const r = await api("/api/dev/duel-bot", { body: {} });
+    toast(r.accepted ? `${r.accepted} challenge${r.accepted > 1 ? "s" : ""} answered. See My duels.` : "You have no open challenges.", r.accepted ? "good" : "");
+    await G.refreshMe();
+  });
+  on("#d-colo", async () => G.openColosseum({ tab: "mine" }));
+  on("#d-odds", async () => G.openOdds());
+  each("[data-shock]", async (b) => {
+    const r = await api("/api/dev/shock", { body: { delta: Number(b.dataset.shock) } });
+    toast(r.crier ? `Jolted “${r.crier}”. The crier is shouting about it.` : `Jolted ${r.shocked}.`, "gold");
   });
   each("[data-intel]", async (b) => {
     await api("/api/dev/next-intel", { body: { rarity: b.dataset.intel } });

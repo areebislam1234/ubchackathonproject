@@ -33,7 +33,11 @@ export const env = {
   intel: str(process.env.INTEL, "on") !== "off",
 };
 
-export const solanaRpcUrl = str(process.env.SOLANA_RPC_URL, IS_LOCAL ? `http://127.0.0.1:${env.localChainPort}` : "https://api.devnet.solana.com");
+// On the local network the game always talks to the local chain: a devnet URL left in .env (from
+// switching NETWORK back to local, or while running the tests) must never be used for local play.
+const rpcFromEnv = str(process.env.SOLANA_RPC_URL);
+const isLocalUrl = (u: string) => /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(u);
+export const solanaRpcUrl = IS_LOCAL ? (rpcFromEnv && isLocalUrl(rpcFromEnv) ? rpcFromEnv : `http://127.0.0.1:${env.localChainPort}`) : rpcFromEnv || "https://api.devnet.solana.com";
 export const geminiBaseUrl = str(process.env.GEMINI_BASE_URL, env.geminiMode === "mock" ? `http://127.0.0.1:${env.mockGeminiPort}` : "https://api.gemini.com");
 export const gameUrl = `http://127.0.0.1:${env.gamePort}`;
 export const networkDataDir = path.join(DATA_DIR, NETWORK);

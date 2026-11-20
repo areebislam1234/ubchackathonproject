@@ -657,6 +657,7 @@ const ICONS = {
   eye: ["........", "..kkkk..", ".kxxxxk.", "kxxkkxxk", "kxxkuxxk", ".kxxxxk.", "..kkkk..", "........"],
   chest: [".kkkkkk.", "kbbbbbbk", "kbnnnnbk", "kkkaakkk", "kbbaabbk", "kbnnnnbk", "kbbbbbbk", "kkkkkkkk"],
   bolt: ["....kkk.", "...kaak.", "..kaak..", ".kaaakk.", "kkkaaak.", "..kaak..", ".kaak...", ".kkk...."],
+  chart: ["k.......", "k.....h.", "k....hh.", "k.h.hk..", "khhhk...", "kh.k....", "k.......", "kkkkkkkk"],
   pin: ["..kkkk..", ".kjjjjk.", "kjjxxjjk", "kjjxxjjk", ".kjjjjk.", "..kjjk..", "...kk...", "........"],
 };
 

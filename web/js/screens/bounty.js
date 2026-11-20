@@ -6,6 +6,7 @@ import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
 import { $, act, cents, closeSheet, currentSheet, esc, fmt, openSheet, pct, timeLeft, toast } from "../ui.js";
 import { openBattle } from "./battle.js";
+import { changeTag, oddsChart, plainOdds } from "../odds-chart.js";
 
 let cur = null; // { id, data, view: "info" | "prep", sig }
 const STATUS = { upcoming: "Upcoming", active: "Active", revealed: "Question revealed", resolved: "Settled" };
@@ -156,7 +157,8 @@ function predictionBlock(G, d) {
     <div class="question">${esc(d.question)}<small>${esc(d.eventTitle)}${d.expiry ? ` · resolves by ${new Date(d.expiry).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : ""} · <span style="font-family:monospace">${esc(d.market)}</span></small></div>
     <div class="row spread"><b style="font:400 22px var(--display)">Market-implied odds · Gemini</b><span class="note">${d.status === "resolved" ? "Settled" : "Live"} · YES ${cents(yesPrice)} to buy · NO ${cents(noPrice)} to buy</span></div>
     <div class="odds"><div class="yes" style="width:${mid ? mid / 100 : 50}%">YES ${pct(mid)}</div><div class="no" style="width:${mid ? 100 - mid / 100 : 50}%">NO ${pct(mid == null ? null : 10000 - mid)}</div></div>
-    <p class="note" style="margin-top:2px">These are the market's odds, not ours. Your call below is yours alone.</p>`;
+    <p class="note" style="margin-top:2px">These are the market's odds, not ours. Your call below is yours alone.</p>
+    <details class="odds-more" ${oddsOpen ? "open" : ""}><summary>How the odds moved ${icon("chart", 1)}</summary><div id="b-odds-chart" data-market="${esc(d.market)}">${chartCache.get(d.market)?.html ?? '<p class="note">Loading…</p>'}</div></details>`;
   const crowd = d.crowd?.count
     ? `<h3>Warlords' calls</h3><p class="note">${d.crowd.yes} called YES · ${d.crowd.no} called NO</p><table class="board"><tbody>${d.crowd.recent
         .map((c) => `<tr><td>${esc(c.name)}</td><td>${c.side.toUpperCase()}</td><td class="num">${pct(c.confBps)} sure</td><td class="num">${c.stake ? `${fmt(c.stake)} gold` : "free call"}</td></tr>`)
@@ -199,7 +201,37 @@ function coachText(G, d, side, conf, stake) {
   return lines.join(" ");
 }
 
+// The odds chart under a revealed question: fetched in the background, cached briefly so the
+// sheet's frequent refreshes don't refetch it.
+const chartCache = new Map();
+let oddsOpen = false;
+async function fillOddsChart(body) {
+  const box = body.querySelector("#b-odds-chart");
+  if (!box) return;
+  const details = box.closest("details");
+  details?.addEventListener("toggle", () => (oddsOpen = details.open));
+  const market = box.dataset.market;
+  const hit = chartCache.get(market);
+  if (hit && Date.now() - hit.at < 15_000) return;
+  try {
+    const s = await api(`/api/odds/${encodeURIComponent(market)}?window=6h`);
+    const html = `${oddsChart(s, { height: 120, label: s.question })}<p class="note">${changeTag(s.changeBps)} over the last 6 hours · ${esc(plainOdds(s.nowBps))} <button class="linklike" data-odds="${esc(market)}">Open on the odds board</button></p>`;
+    chartCache.set(market, { at: Date.now(), html });
+    if (box.isConnected) box.innerHTML = html;
+  } catch {
+    /* the chart is a nice-to-have */
+  }
+}
+
 function wire(G, body, d) {
+  void fillOddsChart(body);
+  if (!body.dataset.oddsLinks) {
+    body.dataset.oddsLinks = "1"; // #sheet-body is shared by every sheet: listen once
+    body.addEventListener("click", (e) => {
+      const m = e.target.closest?.("[data-odds]")?.dataset.odds;
+      if (m) G.openOdds(m);
+    });
+  }
   body.querySelector("#b-enter")?.addEventListener("click", (e) =>
     act(e.currentTarget, async () => {
       cur.data = await api(`/api/bounties/${d.id}/enter`, { body: {} });

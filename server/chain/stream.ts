@@ -4,6 +4,7 @@ import { BADGES } from "../../shared/rules.js";
 import { db, feed, type ChainEvent, type NetworkSample } from "../db";
 import { badgeMints, MEMO_PREFIX } from "./solana";
 import { confirmWithdrawal, creditDeposit } from "../funds";
+import { applyDuelMemo } from "../colosseum";
 
 export type StreamEvent = {
   signature: string;
@@ -82,6 +83,8 @@ export function applyEvents(events: StreamEvent[]) {
           st.signature = e.signature;
           feed({ kind: "chain", text: `Solana: ${p.name}'s ${(BADGES as any)[badge]?.name ?? badge} badge confirmed (slot ${e.slot})`, signature: e.signature, player: p.id });
         }
+      } else if (parts[2] === "call" || parts[2] === "duel") {
+        applyDuelMemo(parts[2], parts.slice(3), e.signature, e.slot); // Colosseum odds receipts and results
       } else if (parts[2] === "withdraw") {
         confirmWithdrawal(e.signature);
       } else if (parts[2] === "result") {

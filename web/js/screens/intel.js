@@ -5,6 +5,9 @@ import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
 import { ago, currentSheet, esc, openSheet, toast } from "../ui.js";
+import { changeTag, oddsChart, plainOdds } from "../odds-chart.js";
+
+const oddsCache = new Map(); // market → { at, html }
 
 const RARITY_ORDER = { legendary: 0, epic: 1, rare: 2, common: 3 };
 const RARITY_COLOR = { common: "#a3a3b3", rare: "#4f8ee0", epic: "#8f52d4", legendary: "#f6c33b" };
@@ -64,6 +67,22 @@ function stamp(r) {
 function render(G) {
   const r = state.open ? state.reports.find((x) => x.id === state.open) : null;
   const body = openSheet("intel", r ? detail(r) : list(G));
+  const box = body.querySelector("#intel-odds");
+  if (box) {
+    const m = box.dataset.market;
+    const hit = oddsCache.get(m);
+    if (hit) box.innerHTML = hit.html;
+    if (!hit || Date.now() - hit.at > 15_000)
+      api(`/api/odds/${encodeURIComponent(m)}?window=24h`)
+        .then((s) => {
+          const html = `${oddsChart(s, { height: 120, label: s.question })}<p class="note">${changeTag(s.changeBps)} over the last 24 hours · ${esc(plainOdds(s.nowBps))} <button class="linklike" id="intel-odds-open">Open on the odds board</button></p>`;
+          oddsCache.set(m, { at: Date.now(), html });
+          if (box.isConnected) box.innerHTML = html;
+          box.querySelector("#intel-odds-open")?.addEventListener("click", () => G.openOdds(m));
+        })
+        .catch(() => (box.innerHTML = `<p class="note">No odds history for this market.</p>`));
+    else box.querySelector("#intel-odds-open")?.addEventListener("click", () => G.openOdds(m));
+  }
   for (const b of body.querySelectorAll("[data-open]"))
     b.addEventListener("click", () => {
       state.open = b.dataset.open;
@@ -149,6 +168,7 @@ function detail(r) {
             ? `<div class="coach">No open market in this category could be matched, so this is a general ${esc(r.topic.toLowerCase())} report.</div>`
             : ""
       }
+      ${r.market?.symbol ? `<section class="rsec"><h3>${icon("chart", 2)} How this market's odds moved</h3><div id="intel-odds" data-market="${esc(r.market.symbol)}"><p class="note">Loading…</p></div></section>` : ""}
       ${r.status === "compiling" ? `<div class="coach decoding-box">Decoding the report… gathering live data for this market. It'll appear here in a few seconds.</div>` : r.sections.map(section).join("")}
       <p class="note report-meta">Recovered from ${esc(r.bossName)} · collected ${when(r.collectedAt)}${r.dataAsOf ? ` · data as of ${when(r.dataAsOf)}` : ""}</p>
     </div>`;

@@ -138,6 +138,11 @@ export class GeminiClient {
     return unwrapList(await this.get("/v1/prediction-markets/events/recently-settled", { limit }));
   }
 
+  /** Forget the cached event list (after a dev action changes the mock market). */
+  clearCache() {
+    this.cache = null;
+  }
+
   /** Active events, cached for a few seconds so a burst of requests costs one API call. */
   async activeEvents(maxAgeMs = 5000): Promise<GeminiEvent[]> {
     if (this.cache && Date.now() - this.cache.at < maxAgeMs) return this.cache.events;

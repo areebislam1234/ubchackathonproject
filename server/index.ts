@@ -8,7 +8,9 @@ import { verifyStreamSignature } from "../shared/hmac";
 import { IS_LOCAL, NETWORK, ROOT, env, explorerAddress, explorerTx, geminiBaseUrl } from "./config";
 import { db, type Player } from "./db";
 import { GameError, assignDrill, bySession, disband, logout, markExplored, onBadge, playerView, register, sendHome, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
-import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, tick, world } from "./bounties";
+import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, gemini, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, spawnHot, tick, world } from "./bounties";
+import { acceptChallenge, cancelChallenge, colosseumTick, colosseumView, devBotAccept, duelById, issueChallenge, onReceipt } from "./colosseum";
+import { crierLog, crierTick, flushOdds, marketList, movers, oddsSeries, oddsTick, onHotMarket, sampleNow, windowMs } from "./odds";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
 import { challenge, devNextIntel, discoverLairs, lairView, lairsFor } from "./bosses";
 import { intelList, reportView, resumeCompiling } from "./intel/reports";
@@ -16,7 +18,7 @@ import { buy, buyMastery, convert, devCredit, fundsView, newDepositReference, qu
 import { depositTarget, sendUsdc, solanaPayUrl, treasuryBalance } from "./chain/usdc";
 
 setWithdrawSender(sendUsdc);
-import { badgeMints, chainStatus, claimAll, holdingsFor, linkWallet, loadAuthority, mintBadge, sealResults, unlinkWallet, verifyWalletSignature, walletChallenge } from "./chain/solana";
+import { badgeMints, chainStatus, claimAll, holdingsFor, linkWallet, loadAuthority, mintBadge, postReceipt, sealResults, unlinkWallet, verifyWalletSignature, walletChallenge } from "./chain/solana";
 import { applyEvents, applyNetwork, extractEvents, extractNetwork } from "./chain/stream";
 import { encodePng } from "./png";
 
@@ -25,6 +27,9 @@ onBadge((p, badge) => {
   if (p.wallet) void mintBadge(p, badge);
 });
 onSeal((b) => void sealResults(b));
+onReceipt((r) => void postReceipt(r)); // Colosseum odds receipts and results, as Solana memos
+onHotMarket((market, realm) => spawnHot(market, realm));
+const marketsForOdds = () => gemini.openMarkets();
 
 const app = express();
 app.disable("x-powered-by");
@@ -144,6 +149,18 @@ app.get("/api/bounties/:id/opponents", auth, wrap((req) => ({ opponents: opponen
 app.post("/api/bounties/:id/attack", auth, wrap((req) => attack(req.player, String(req.params.id), String(req.body?.opponent ?? "guardian"), req.body?.units ?? {})));
 app.post("/api/bounties/:id/predict", auth, wrap((req) => predict(req.player, String(req.params.id), req.body?.side, req.body?.confBps, req.body?.stake)));
 app.get("/api/battles/:id", auth, wrap((req) => battle(String(req.params.id))));
+
+// ── Odds over time, movers, the town crier (Gemini prices recorded by the server) ────────────────
+app.get("/api/odds/movers", auth, wrap((req) => ({ window: windowMs(req.query.window), movers: movers(windowMs(req.query.window), 16), crier: crierLog(10), now: Date.now() })));
+app.get("/api/odds/markets", auth, wrap(() => ({ markets: marketList(), now: Date.now() })));
+app.get("/api/odds/:market", auth, wrap((req) => oddsSeries(String(req.params.market), windowMs(req.query.window))));
+
+// ── The Colosseum ─────────────────────────────────────────────────────
+app.get("/api/colosseum", auth, wrap((req) => colosseumView(req.player)));
+app.get("/api/colosseum/:id", auth, wrap((req) => duelById(req.player, String(req.params.id))));
+app.post("/api/colosseum/challenge", auth, wrap((req) => issueChallenge(req.player, req.body ?? {})));
+app.post("/api/colosseum/:id/accept", auth, wrap((req) => acceptChallenge(req.player, String(req.params.id), req.body ?? {})));
+app.post("/api/colosseum/:id/cancel", auth, wrap((req) => cancelChallenge(req.player, String(req.params.id))));
 
 // ── Boss lairs ────────────────────────────────────────────────────────
 app.get("/api/bosses", auth, wrap((req) => ({ lairs: lairsFor(req.player), now: Date.now() })));
@@ -330,6 +347,39 @@ app.post(
   }),
 );
 app.get("/api/dev/bounties", devOnly, auth, wrap(() => ({ bounties: devList(), now: Date.now() })));
+app.post("/api/dev/duel-bot", devOnly, auth, wrap((req) => ({ accepted: devBotAccept(req.player) })));
+app.post(
+  "/api/dev/duel-settle/:id",
+  devOnly,
+  auth,
+  wrap(async (req) => {
+    const d = db.data.duels?.[String(req.params.id)];
+    if (!d) throw new GameError("No such duel.", 404);
+    if (env.geminiMode !== "mock") throw new GameError("Settling by hand only works with mock Gemini.");
+    const side = req.body?.side === "no" ? "no" : "yes";
+    const r = await fetch(`${geminiBaseUrl}/mock/settle`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ market: d.market, side }) });
+    if (!r.ok) throw new GameError("Mock Gemini refused to settle.");
+    gemini.clearCache();
+    await colosseumTick(true);
+    return duelById(req.player, d.id);
+  }),
+);
+app.post(
+  "/api/dev/shock",
+  devOnly,
+  auth,
+  wrap(async (req) => {
+    // mock only: jolt a market's odds, then let the crier and the odds history see it right away
+    if (env.geminiMode !== "mock") throw new GameError("Shocking a market only works with mock Gemini.");
+    const r = await fetch(`${geminiBaseUrl}/mock/shock`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ market: req.body?.market ?? null, delta: Number(req.body?.delta ?? 0.15) }) });
+    const j: any = await r.json().catch(() => ({}));
+    if (!r.ok) throw new GameError(j.error ?? "Mock Gemini refused.");
+    gemini.clearCache();
+    await sampleNow(marketsForOdds);
+    const top = crierTick(Date.now(), { force: true });
+    return { shocked: j.market, crier: top ? top.question : null };
+  }),
+);
 app.post(
   "/api/dev/spawn",
   devOnly,
@@ -416,14 +466,20 @@ app.listen(env.gamePort, () => {
   console.log(`StakeClash on http://localhost:${env.gamePort}  network=${NETWORK} gemini=${env.geminiMode}`);
   void tick();
   setInterval(() => void tick(), 1500);
+  setInterval(() => {
+    void oddsTick(marketsForOdds); // record Gemini odds; the town crier announces big movers
+    void colosseumTick(); // rival warlords answer challenges; settled markets pay the foresight half
+  }, 1500);
   resumeCompiling();
   console.log(`intel: ${env.intel ? "live sources (sample data when unreachable)" : "off, sample data only"}`);
 });
 process.on("SIGTERM", () => {
+  flushOdds();
   db.flush();
   process.exit(0);
 });
 process.on("SIGINT", () => {
+  flushOdds();
   db.flush();
   process.exit(0);
 });

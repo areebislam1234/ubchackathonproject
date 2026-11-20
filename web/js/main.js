@@ -17,6 +17,8 @@ import { openLair, refreshLairSheet } from "./screens/lair.js";
 import { openInventory, unseenCount } from "./screens/inventory.js";
 import { openIntel } from "./screens/intel.js";
 import { openTreasury } from "./screens/treasury.js";
+import { openColosseum } from "./screens/colosseum.js";
+import { openOdds } from "./screens/odds.js";
 
 // Shared game context handed to every screen.
 export const G = {
@@ -35,6 +37,8 @@ export const G = {
   openBounty: (id) => openBounty(G, id),
   openLair: (id) => openLair(G, id),
   openIntel: (id) => openIntel(G, id),
+  openColosseum: (opts) => openColosseum(G, opts),
+  openOdds: (market) => openOdds(G, market),
   travelTo,
   setCourse,
 };
@@ -295,7 +299,7 @@ function tickPrompt() {
   if (t.kind === "camp") {
     const b = G.bounties.find((x) => x.id === t.camp.id) ?? t.camp;
     const when = b.status === "upcoming" ? `opens in ${timeLeft(b.startsAt - G.now())}` : b.status === "active" ? `${timeLeft(b.endsAt - G.now())} left` : b.status === "revealed" ? "question revealed" : "settled";
-    el.innerHTML = `<kbd>E</kbd><span class="p-main">${esc(b.id)}</span><span>${b.tier[0].toUpperCase() + b.tier.slice(1)}${b.featured ? " · Featured" : ""} · ${when} · ${b.participants ?? 0}/${b.maxPlayers ?? "?"} warlords</span>`;
+    el.innerHTML = `<kbd>E</kbd><span class="p-main">${esc(b.id)}</span><span>${b.tier[0].toUpperCase() + b.tier.slice(1)}${b.featured ? " · Featured" : ""}${b.hot ? " · Hot market" : ""} · ${when} · ${b.participants ?? 0}/${b.maxPlayers ?? "?"} warlords</span>`;
   } else if (t.kind === "lair") {
     const l = G.lairs.find((x) => x.id === t.lair.id) ?? t.lair;
     const wait = (l.readyAt ?? 0) - G.now();
@@ -464,6 +468,11 @@ $("minimap").addEventListener("click", () => openMap(G));
 
 // ── Feed ──────────────────────────────────────────────────────────────
 let feedSince = 0;
+let tickerMarket = null;
+const TICKER_LABEL = { chain: "On Solana", crier: "Town crier", duel: "Colosseum", battle: "Battle", boss: "Bosses", economy: "Treasury" };
+$("ticker").addEventListener("click", (e) => {
+  if (tickerMarket && !(e.target instanceof HTMLAnchorElement)) openOdds(G, tickerMarket);
+});
 async function pollFeed() {
   try {
     const r = await api(`/api/feed?since=${feedSince}`);
@@ -471,9 +480,13 @@ async function pollFeed() {
     const first = feedSince === 0;
     feedSince = r.items[r.items.length - 1].at;
     const last = r.items[r.items.length - 1];
-    $("ticker-text").innerHTML = `${esc(last.text)}${last.explorer ? ` <a href="${esc(last.explorer)}" target="_blank" rel="noopener">view tx</a>` : ""}`;
+    $("ticker-text").innerHTML = `${esc(last.kind === "crier" ? last.text.replace(/^Town crier: /, "") : last.text)}${last.explorer ? ` <a href="${esc(last.explorer)}" target="_blank" rel="noopener">view tx</a>` : ""}`;
+    $("ticker-label").textContent = TICKER_LABEL[last.kind] ?? "Realm news";
+    tickerMarket = last.kind === "crier" ? last.market : null;
+    $("ticker").classList.toggle("clickable", !!tickerMarket);
     if (first) return;
     for (const it of r.items) {
+      if (it.kind === "crier") (toast(it.text, "crier"), sfx("waystone"));
       if (it.player !== G.me?.id) continue;
       if (it.kind === "chain") toast(it.text, "good");
       if (it.kind === "defend") toast(it.text, "good");
@@ -494,6 +507,8 @@ $("btn-bank").addEventListener("click", () => openTreasury(G));
 $("res-usdc").addEventListener("click", () => openTreasury(G, "overview"));
 $("res-might").addEventListener("click", () => openTreasury(G, "overview"));
 $("btn-profile").addEventListener("click", () => openProfile(G));
+$("btn-arena").addEventListener("click", () => openColosseum(G));
+$("btn-odds").addEventListener("click", () => openOdds(G));
 $("btn-dev").addEventListener("click", () => openDev(G));
 $("hud-chief").addEventListener("click", () => openProfile(G));
 $("sheet-close").addEventListener("click", closeSheet);
@@ -524,6 +539,8 @@ addEventListener("keydown", (e) => {
   if (k === "i") openIntel(G);
   if (k === "t") openTreasury(G);
   if (k === "p") openProfile(G);
+  if (k === "k") openColosseum(G);
+  if (k === "o") openOdds(G);
 });
 
 // Pause walking while any overlay is up.

@@ -18,7 +18,8 @@ let running = null;
 const BOSS_BATTLE_SCALE = { common: 1.15, rare: 1.45, epic: 1.75, legendary: 2.1 };
 export const battleOpen = () => !$("battle").hidden;
 
-export function openBattle(G, rec, { loot = 0, onDone, doneLabel = "Back to the bounty", lootHtml = "" } = {}) {
+export function openBattle(G, rec, { loot = 0, onDone, doneLabel = "Back to the bounty", lootHtml = "", arena = false } = {}) {
+  arenaView = arena ? { me: G.me?.id } : null;
   const sim = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts, vigor: rec.attacker.vigor }, defender: rec.defender, seed: rec.seed, record: true });
   const el = $("battle");
   el.innerHTML = `
@@ -239,9 +240,11 @@ function background(seed) {
   return c;
 }
 
+let arenaView = null; // Colosseum replays: told from the viewer's side, and nobody loses units
 function showResult(G, rec, loot, onDone, doneLabel = "Back to the bounty", lootHtml = "") {
   const r = rec.result;
-  const win = r.winner === "attacker";
+  const asDefender = arenaView && rec.defender.id === arenaView.me;
+  const win = asDefender ? r.winner === "defender" : r.winner === "attacker";
   sfx(win ? "victory" : "defeat");
   const lost = Object.entries(r.lost)
     .map(([k, n]) => `${n} ${UNITS[k]?.name ?? k}`)
@@ -249,15 +252,15 @@ function showResult(G, rec, loot, onDone, doneLabel = "Back to the bounty", loot
   const card = document.createElement("div");
   card.className = `result-card panel parchment ${win ? "win" : "loss"}`;
   card.innerHTML = `
-    <h2>${win ? "Victory!" : "Repelled"}</h2>
-    <p class="sub">${win ? `You broke ${esc(rec.defender.name)}.` : `${esc(rec.defender.name)} held the line.`}</p>
+    <h2>${win ? "Victory!" : arenaView ? "Defeat" : "Repelled"}</h2>
+    <p class="sub">${arenaView ? (win ? `You beat ${esc(asDefender ? rec.attacker.name : rec.defender.name)} in the arena.` : `${esc(asDefender ? rec.attacker.name : rec.defender.name)} took the arena.`) : win ? `You broke ${esc(rec.defender.name)}.` : `${esc(rec.defender.name)} held the line.`}</p>
     <div class="facts" style="grid-template-columns:repeat(3,1fr)">
       <div class="fact"><b>${r.destruction}%</b><span>Destroyed</span></div>
       <div class="fact"><b>${r.survival}%</b><span>Survived</span></div>
       <div class="fact"><b>+${fmt(r.score)}</b><span>Score</span></div>
     </div>
     ${lootHtml || `<p class="note">${Math.round(r.destruction * 10)} for damage${win ? " + 300 win bonus" : ""} + ${Math.round(r.survival * 2)} for survivors${loot ? ` · looted ${loot} gold` : ""}.</p>`}
-    <p class="note">${lost ? `Fallen: ${esc(lost)}.` : "No losses."}</p>
+    <p class="note">${arenaView ? "Arena fights are to first blood: no units were lost." : lost ? `Fallen: ${esc(lost)}.` : "No losses."}</p>
     <button class="btn btn-gold btn-big" id="b-done">${esc(doneLabel)}</button>`;
   $("battle").append(card);
   $("b-done").onclick = () => {

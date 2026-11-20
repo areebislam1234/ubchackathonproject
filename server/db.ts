@@ -46,6 +46,7 @@ export type Player = {
   might?: number; // upgrade currency, from converted realized yield
   mastery?: Record<string, number>; // Mastery rank per unit type
   fundClaims?: Record<string, { at: number; response: unknown }>; // money requestId → result (idempotency)
+  colosseum?: { duels: number; steelWins: number; foresightWins: number; mightWon: number; claims?: Record<string, { at: number; response: unknown }> };
 };
 
 export type LedgerEntry = {
@@ -149,6 +150,7 @@ export type Bounty = {
   outcome?: "yes" | "no";
   resolvedAt?: number;
   wildcard?: boolean; // Gemini had no market in this realm's category
+  hot?: boolean; // spawned because its market moved sharply
 };
 
 export type Champion = { look: string; hp: number; dmg: number; range: number; speed: number; cooldown: number; splash: number };
@@ -164,7 +166,51 @@ export type BattleRecord = {
   result: { winner: string; ticks: number; destruction: number; survival: number; score: number; lost: UnitMap };
 };
 
-export type FeedItem = { at: number; kind: string; text: string; bounty?: string; signature?: string; player?: string };
+export type FeedItem = { at: number; kind: string; text: string; bounty?: string; signature?: string; player?: string; market?: string; duel?: string };
+
+/** An on-chain receipt: a memo the game posts, confirmed when the QuickNode Stream delivers it. */
+export type Receipt = { memo: string; status: "sending" | "sent" | "onchain" | "failed"; signature?: string; error?: string; verified?: boolean };
+
+/** One side of a Colosseum duel: the army sent and a call on the duel's Gemini market. */
+export type DuelSide = {
+  playerId: string;
+  name: string;
+  bot: boolean;
+  wallet?: string;
+  units: UnitMap;
+  levels: UnitMap;
+  boosts?: Record<string, number>;
+  vigor?: Record<string, number>;
+  power: number;
+  // the call, committed on Solana as a hash before anyone fights and revealed afterwards
+  call: { side: "yes" | "no"; confBps: number; priceBps: number; at: number; salt: string; commit: string };
+  receipt?: Receipt;
+  brier?: number;
+  payout?: number; // Might paid to this side (steel + foresight)
+};
+
+export type Duel = {
+  id: string;
+  createdAt: number;
+  status: "open" | "fought" | "settled" | "cancelled";
+  stake: number; // Might each side put up
+  market: string;
+  question: string;
+  eventTitle: string;
+  category: string;
+  expiry: string | null;
+  practice: boolean; // mock Gemini market
+  challenger: DuelSide;
+  rival?: DuelSide;
+  botAt?: number; // when a rival warlord steps in if no one has accepted
+  battle?: string;
+  steel?: { winner: string; pot: number; at: number };
+  foresight?: { winner: string | "split"; pot: number; outcome: "yes" | "no"; at: number };
+  burned?: number;
+  hash?: string;
+  seal?: Receipt;
+  settledAt?: number;
+};
 
 /** One sampled block's activity, from the QuickNode Stream filter. */
 export type NetworkSample = { slot: number; blockTime: number | null; txCount: number; failed: number; vote: number; programs: Record<string, number>; transfers: Record<string, { count: number; amount: number }>; receivedAt: number };
@@ -182,10 +228,11 @@ export type DBShape = {
   usernames: Record<string, string>; // lower-case name → player id
   emails?: Record<string, string>; // legacy
   bounties: Record<string, Bounty>;
+  duels?: Record<string, Duel>;
   battles: Record<string, BattleRecord>;
   feed: FeedItem[];
   chain: { processed: Record<string, number>; holdings: Record<string, Record<string, number>>; events: ChainEvent[]; deliveries: number; network?: NetworkSample[] };
-  meta: { bountySeq: number; battleSeq: number; playerSeq: number };
+  meta: { bountySeq: number; battleSeq: number; playerSeq: number; duelSeq?: number };
 };
 
 const empty = (): DBShape => ({
@@ -234,6 +281,8 @@ class Database {
     if (d.feed.length > 300) d.feed = d.feed.slice(-300);
     if (d.chain.events.length > 500) d.chain.events = d.chain.events.slice(-500);
     if ((d.chain.network?.length ?? 0) > 500) d.chain.network = d.chain.network!.slice(-500);
+    const duels = Object.values(d.duels ?? {}).filter((x) => x.status === "settled" || x.status === "cancelled");
+    if (duels.length > 1000) for (const x of duels.sort((a, c) => a.createdAt - c.createdAt).slice(0, duels.length - 1000)) delete d.duels![x.id];
     const battles = Object.values(d.battles);
     if (battles.length > 2000) for (const b of battles.sort((a, c) => a.at - c.at).slice(0, battles.length - 2000)) delete d.battles[b.id];
     const tmp = this.file + ".tmp";

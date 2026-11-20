@@ -1603,3 +1603,220 @@ code {
   display: flex;
   gap: 6px;
 }
+
+/* ── Odds charts, the odds board and the town crier ─────────────────── */
+.ochart {
+  margin: 6px 0;
+}
+.ochart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--parch-d);
+  border: 2px solid var(--parch-dd);
+}
+.ochart.empty {
+  padding: 10px 12px;
+  background: var(--parch-d);
+  border: 2px dashed var(--parch-dd);
+}
+.og-grid {
+  stroke: var(--parch-dd);
+  stroke-width: 1;
+}
+.og-grid.mid {
+  stroke: var(--wood-l);
+  stroke-dasharray: 4 4;
+}
+.og-lab {
+  font: 400 13px var(--display);
+  fill: var(--wood-d);
+}
+.og-line {
+  stroke-width: 3;
+}
+.og-line.up {
+  stroke: var(--green-d);
+}
+.og-line.down {
+  stroke: var(--red-d);
+}
+.og-area.up {
+  fill: rgba(79, 168, 58, 0.22);
+}
+.og-area.down {
+  fill: rgba(226, 60, 60, 0.18);
+}
+.og-dot {
+  stroke: var(--outline);
+  stroke-width: 2;
+}
+.og-dot.up {
+  fill: var(--green-l);
+}
+.og-dot.down {
+  fill: var(--red);
+}
+.spark {
+  display: inline-block;
+  vertical-align: middle;
+}
+.chg {
+  font: 400 19px var(--display);
+  white-space: nowrap;
+}
+.chg.up {
+  color: var(--green-d);
+}
+.chg.down {
+  color: var(--red-d);
+}
+.odds-head,
+.colo-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.colo-art {
+  width: 128px;
+  image-rendering: pixelated;
+}
+.odds-art {
+  image-rendering: pixelated;
+}
+table.movers tr.mover {
+  cursor: pointer;
+}
+table.movers tr.mover:hover td,
+table.movers tr.mover:focus td {
+  background: var(--parch-d);
+}
+.spark-cell {
+  width: 104px;
+}
+.crier-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+.linklike {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--blue-d);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+details.odds-more {
+  margin: 4px 0 8px;
+}
+details.odds-more summary {
+  cursor: pointer;
+  font: 400 19px var(--display);
+}
+.ticker.clickable {
+  cursor: pointer;
+}
+.ticker.clickable #ticker-text {
+  text-decoration: underline dotted;
+}
+.toast.crier {
+  background: var(--parch);
+  color: var(--ink);
+  box-shadow: inset var(--px) var(--px) 0 #fff7da;
+  max-width: min(560px, 90vw);
+}
+
+/* ── The Colosseum ──────────────────────────────────────────────────── */
+.duel-card h4 {
+  margin: 0;
+}
+.duel-q {
+  margin: 4px 0;
+  font-weight: 600;
+}
+.duel-list {
+  display: grid;
+  gap: 10px;
+}
+.duel-card.settled {
+  border-color: var(--gold-d);
+}
+.duel-sides td {
+  vertical-align: top;
+}
+.mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.rcpt {
+  display: inline-block;
+  padding: 0 6px;
+  font: 400 15px var(--display);
+  color: #fff;
+  border: 2px solid var(--outline);
+  background: var(--stone-d);
+}
+.rcpt.ok {
+  background: var(--green-d);
+}
+.rcpt.bad {
+  background: var(--red-d);
+}
+.rcpt.wait {
+  animation: blink 1.2s steps(2) infinite;
+}
+.verify {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--parch-d);
+  border: 2px solid var(--parch-dd);
+}
+.rlist.small {
+  font-size: 13px;
+}
+label.field {
+  display: grid;
+  gap: 4px;
+  font: 400 19px var(--display);
+}
+label.field select {
+  font: 500 15px var(--ui);
+  padding: 6px 8px;
+  border: var(--px) solid var(--outline);
+  background: #fffbea;
+  color: var(--ink);
+  max-width: 100%;
+}
+.dock-btn {
+  width: 66px;
+}
+/* eleven dock buttons: the ticker sits above the dock unless the screen is very wide */
+.ticker {
+  bottom: 96px;
+  max-width: min(640px, calc(100vw - 24px));
+}
+@media (min-width: 1500px) {
+  .ticker {
+    bottom: 12px;
+    max-width: min(560px, calc(100vw - 920px));
+  }
+}
+@media (max-width: 560px) {
+  .colo-art {
+    width: 80px;
+  }
+  .spark-cell {
+    display: none;
+  }
+}
+.fact b .chg {
+  font-size: inherit;
+}

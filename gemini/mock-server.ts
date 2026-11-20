@@ -149,6 +149,20 @@ app.get("/v1/prediction-markets/categories", (_req, res) => {
 });
 
 // ── Mock-only controls ────────────────────────────────────────────────
+/** Jolt a market's odds (dev demos of the movers board and the town crier): { market?, delta } */
+app.post("/mock/shock", (req, res) => {
+  const want = req.body?.market ? String(req.body.market) : null;
+  const open = [...events.values()].flatMap((e) => e.contracts.filter((c) => c.status === "active"));
+  const c = want ? open.find((x) => x.instrumentSymbol === want) : open[Math.floor(Math.random() * open.length)];
+  if (!c) return void res.status(404).json({ error: "no such open market" });
+  let delta = Number(req.body?.delta ?? 0.15);
+  if (!Number.isFinite(delta) || delta === 0) delta = 0.15;
+  if (c._p + delta > 0.97 || c._p + delta < 0.03) delta = -delta; // bounce off the edges
+  c._p = Math.min(0.97, Math.max(0.03, c._p + delta));
+  tick();
+  res.json({ ok: true, market: c.instrumentSymbol, p: c._p });
+});
+
 app.post("/mock/settle", (req, res) => {
   const { market, side } = req.body ?? {};
   if (side !== "yes" && side !== "no") return void res.status(400).json({ error: 'side must be "yes" or "no"' });

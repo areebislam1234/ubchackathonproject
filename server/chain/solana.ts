@@ -29,7 +29,7 @@ import * as T22 from "@solana-program/token-2022";
 import { getAddMemoInstruction, LEGACY_MEMO_PROGRAM_ADDRESS_V3 } from "@solana-program/memo";
 import { BADGES, BADGE_IDS } from "../../shared/rules.js";
 import { IS_LOCAL, env, explorerTx, networkDataDir, solanaRpcUrl } from "../config";
-import { db, feed, type Bounty, type Player, type WalletKind } from "../db";
+import { db, feed, type Bounty, type Player, type Receipt, type WalletKind } from "../db";
 
 export const MEMO_PREFIX = "stakeclash:v1";
 const AUTH_FILE = path.join(networkDataDir, "authority.json");
@@ -216,6 +216,28 @@ export function sealResults(b: Bounty) {
       await confirm(sig);
     } catch (e) {
       b.results!.seal = { status: "failed", error: (e as Error).message.slice(0, 200) };
+      db.save();
+    }
+  });
+}
+
+/**
+ * Post a memo receipt (Colosseum calls and results). The receipt object is updated in place as the
+ * transaction is sent and confirmed; the QuickNode Stream later marks it "onchain" and verified.
+ */
+export function postReceipt(r: Receipt) {
+  r.status = "sending";
+  db.save();
+  return enqueue(async () => {
+    try {
+      const sig = await send([memo(r.memo)]);
+      if (r.status === "sending") r.status = "sent"; // the Stream may already have confirmed it
+      r.signature ??= sig;
+      db.save();
+      await confirm(sig);
+    } catch (e) {
+      r.status = "failed";
+      r.error = (e as Error).message.slice(0, 200);
       db.save();
     }
   });

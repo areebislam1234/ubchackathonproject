@@ -65,7 +65,7 @@ function leaderboard(b: Bounty) {
 export function mapFor(p: Player) {
   const explored = exploredBytes(p);
   return visibleBounties().map((b) => {
-    const base = { id: b.id, tier: b.tier, featured: b.featured, realm: b.realm, status: b.status, startsAt: b.startsAt, endsAt: b.endsAt, participants: Object.keys(b.entries).length, maxPlayers: TIERS[b.tier].maxPlayers, entered: !!b.entries[p.id] };
+    const base = { id: b.id, tier: b.tier, featured: b.featured, hot: !!b.hot, realm: b.realm, status: b.status, startsAt: b.startsAt, endsAt: b.endsAt, participants: Object.keys(b.entries).length, maxPlayers: TIERS[b.tier].maxPlayers, entered: !!b.entries[p.id] };
     if (isDiscovered(p, b, explored) || b.entries[p.id]) return { ...base, discovered: true, x: b.x, y: b.y };
     return { ...base, discovered: false, rumor: rumorOf(b) };
   });
@@ -126,7 +126,7 @@ export function bountyFor(p: Player, id: string) {
 
 // ── Spawning ──────────────────────────────────────────────────────────
 let marketCache: { at: number; list: MarketSummary[] } = { at: 0, list: [] };
-async function openMarkets() {
+export async function openMarkets() {
   if (now() - marketCache.at < 8000) return marketCache.list;
   const list = (await gemini.openMarkets()).filter((m) => m.bestBidBps !== null && m.bestAskBps !== null && m.bestAskBps > 0 && m.bestBidBps < 10000);
   marketCache = { at: now(), list };
@@ -233,6 +233,21 @@ async function spawnBounties(first = false) {
     spawnIn(counts[0].id, markets, { activeNow: false, first });
   }
   db.save();
+}
+
+/**
+ * A market moved sharply (see server/odds.ts): spawn a featured bounty around it in its realm, active
+ * now. Its question stays sealed like any other. Skipped if a live bounty already uses that market.
+ */
+export function spawnHot(market: string, realm: string) {
+  const live = Object.values(db.data.bounties).some((b) => b.status !== "resolved" && b.market === market);
+  const m = marketCache.list.find((x) => x.market === market);
+  if (live || !m || !REALMS.some((r) => r.id === realm)) return false;
+  const b = spawnIn(realm, [m], { activeNow: true, featured: true });
+  if (!b) return false;
+  b.hot = true;
+  db.save();
+  return true;
 }
 
 // ── Home bases ────────────────────────────────────────────────────────

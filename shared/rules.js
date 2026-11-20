@@ -359,7 +359,29 @@ export const BADGES = {
   spymaster: { name: "Spymaster", desc: "Collect 10 intelligence reports.", icon: "scroll" },
   "first-profit": { name: "First Profit", desc: "Realize a gain on an investment.", icon: "coin" },
   "master-at-arms": { name: "Master-at-Arms", desc: "Raise a unit type to Mastery rank 20.", icon: "helmet" },
+  gladiator: { name: "Gladiator", desc: "Win a Colosseum duel.", icon: "swords" },
 };
+
+// ── The Colosseum: 1v1 duels for Might ────────────────────────────────
+// Both warlords put up the same Might and make a call on the same live Gemini market. The armies
+// fight at once: the winner takes the steel half of the pot. The other half waits for Gemini to
+// settle the market and goes to the better-calibrated call (lower Brier score); a tie splits it.
+export const COLOSSEUM = {
+  maxStake: 5000, // Might per side
+  burnBps: 500, // 5% of the pot is burned so Might doesn't inflate
+  steelShare: 0.5, // of the pot after the burn; the rest is the foresight half
+  openPerPlayer: 3, // open challenges at once
+  botAcceptSec: 25, // a rival warlord accepts an untaken challenge after this long
+  minConfBps: 5000,
+  maxConfBps: 9900,
+};
+/** Split a duel pot: [steel half, foresight half, burned]. */
+export function duelPot(stake) {
+  const pot = stake * 2;
+  const burned = Math.floor((pot * COLOSSEUM.burnBps) / 10000);
+  const steel = Math.floor((pot - burned) * COLOSSEUM.steelShare);
+  return { pot, burned, steel, foresight: pot - burned - steel };
+}
 export const BADGE_IDS = Object.keys(BADGES);
 
 export const BOT_NAMES = [

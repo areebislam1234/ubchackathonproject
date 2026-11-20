@@ -4,7 +4,8 @@
 // rivals, rewards by placement, the revealed question, predictions and Gemini settlement,
 // fortress and army rules, Solana wallet linking, badge minting confirmed via the Stream,
 // sealed results, webhook security and de-duplication, and the QuickNode filter itself; then boss
-// lairs, boss battles, loot and the Bag, and intelligence reports.
+// lairs, boss battles, loot and the Bag, and intelligence reports; then odds history, movers and
+// the town crier, and Colosseum duels with their Solana odds receipts.
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -24,6 +25,15 @@ Object.assign(process.env, {
   BOUNTY_ACTIVE_SECONDS: "900",
   PUBLIC_URL: "http://localhost:4610",
   INTEL: "off", // reports use labelled sample data, so the suite needs no internet
+  ODDS_SAMPLE_SECONDS: "2", // record Gemini odds often so the history tests run quickly
+  // ignore anything a developer's .env sets for devnet (dotenv never overrides these)
+  SOLANA_RPC_URL: "",
+  SOLANA_AUTHORITY_KEY: "",
+  USDC_MINT: "",
+  USE_LOCAL_STREAM: "",
+  GEMINI_BASE_URL: "",
+  DEV_TOOLS: "on",
+  BOTS: "on",
 });
 const { ROOT, gameUrl, geminiBaseUrl } = await import("../server/config");
 const { generateWorld, REALMS, realmForMarket, WORLD_SEED, placeBossLairs } = await import("../shared/world.js");
@@ -88,6 +98,7 @@ try {
   ok((await call(second.body.token, "GET", "/api/me")).status === 401 && (await call(alice.token, "GET", "/api/me")).status === 200, "logging out ends that session only");
   for (let i = 0; i < 5; i++) await call(null, "POST", "/api/login", { name: "bob", password: `guess-${i}-xxxx` });
   ok((await call(null, "POST", "/api/login", { name: "bob", password: "bob-secret-22" })).status === 429, "5 wrong passwords lock the name for a minute");
+  await sleep(700); // the database saves a moment after each change
   const db = JSON.parse(fs.readFileSync(path.join(DATA, "local", "db.json"), "utf8"));
   ok(!JSON.stringify(db).includes("alice-secret-1") && db.players[alice.player.id].auth.algo === "scrypt", "passwords are stored only as salted scrypt hashes");
 
@@ -396,6 +407,88 @@ try {
   ok(n1.network === 1 && n2.network === 0, "Stream network samples are stored once per slot");
   const sampled = runFilter(filter, { data: [{ slot: 150, blockTime: 1, transactions: [{ meta: { err: null }, transaction: { signatures: ["N1"], message: { accountKeys: ["x"], instructions: [] } } }] }], metadata: {} });
   ok(sampled?.network?.[0]?.slot === 150 && sampled.events.length === 0, "the filter samples one block in every 50 for network activity");
+
+  console.log("\nOdds history, movers and the town crier");
+  {
+  const cara = (await call(null, "POST", "/api/register", { name: "Cara", password: "cara-secret-33" })).body;
+  const markets = await until("odds history", async () => {
+    const r = (await call(cara.token, "GET", "/api/odds/markets")).body;
+    return r?.markets?.length ? r.markets : null;
+  });
+  ok(markets.length > 5 && markets.every((m: any) => m.nowBps >= 0 && m.nowBps <= 10000 && Array.isArray(m.spark)), `the server records odds for every open Gemini market (${markets.length} markets)`);
+  const shock = (await call(cara.token, "POST", "/api/dev/shock", { market: markets[0].market, delta: 0.2 })).body;
+  ok(shock.shocked === markets[0].market && shock.crier, "a sharp move is picked up straight away");
+  const mv = (await call(cara.token, "GET", "/api/odds/movers?window=15m")).body;
+  const top = mv.movers.find((m: any) => m.market === markets[0].market);
+  ok(top && Math.abs(top.changeBps) >= 1000 && mv.movers[0].market === markets[0].market, "the movers board ranks it first by its move");
+  ok(mv.crier[0]?.market === markets[0].market && /^Town crier: odds on “.+” (jumped|fell) from \d+¢ to \d+¢/.test(mv.crier[0].text), "the town crier announces it in plain words");
+  const feedNow = (await call(cara.token, "GET", "/api/feed?since=0")).body.items;
+  ok(feedNow.some((f: any) => f.kind === "crier" && f.market === markets[0].market), "the crier's headline reaches the realm feed");
+  const series = (await call(cara.token, "GET", `/api/odds/${encodeURIComponent(markets[0].market)}?window=1h`)).body;
+  ok(series.points.length > 2 && series.points.every((p: any) => Array.isArray(p) && p[1] >= 0 && p[1] <= 10000) && series.nowBps === top.nowBps, "each market's odds-over-time series is ready to chart");
+  ok((await call(null, "GET", `/api/odds/movers`)).status === 401, "the odds board needs a signed-in warlord");
+
+  console.log("\nThe Colosseum");
+  const colo = (await call(cara.token, "GET", "/api/colosseum")).body;
+  ok(colo.config.burnBps === 500 && colo.might === 0 && Array.isArray(colo.open), "the Colosseum opens with its rules and your Might");
+  await call(cara.token, "POST", "/api/dev/usdc", { might: 1000 });
+  const dax = (await call(null, "POST", "/api/register", { name: "Dax", password: "dax-secret-444" })).body;
+  await call(dax.token, "POST", "/api/dev/usdc", { might: 1000 });
+  const caraArmy = (await call(cara.token, "GET", "/api/me")).body.army;
+  const mkt = markets.find((m: any) => m.market !== markets[0].market) ?? markets[0];
+  const rid = crypto.randomUUID().replace(/-/g, "");
+  ok((await call(cara.token, "POST", "/api/colosseum/challenge", { units: {}, stake: 100, market: mkt.market, side: "yes", confBps: 7000, requestId: rid })).status === 400, "a challenge needs an army");
+  ok((await call(cara.token, "POST", "/api/colosseum/challenge", { units: caraArmy, stake: 5000, market: mkt.market, side: "yes", confBps: 7000, requestId: rid })).status === 400, "you can't stake Might you don't have");
+  ok((await call(cara.token, "POST", "/api/colosseum/challenge", { units: caraArmy, stake: 100, market: "GEMI-NOPE", side: "yes", confBps: 7000, requestId: rid })).status === 400, "only open Gemini markets can be duelled on");
+  const ch = await call(cara.token, "POST", "/api/colosseum/challenge", { units: caraArmy, stake: 200, market: mkt.market, side: "yes", confBps: 7000, requestId: rid });
+  const again = await call(cara.token, "POST", "/api/colosseum/challenge", { units: caraArmy, stake: 200, market: mkt.market, side: "yes", confBps: 7000, requestId: rid });
+  const duelId = ch.body.duel.id;
+  ok(ch.status === 200 && ch.body.might === 800 && again.body.duel.id === duelId && (await call(cara.token, "GET", "/api/me")).body.might === 800, "issuing a challenge escrows the stake, once (a retried request returns the same duel)");
+  const seenByDax = (await call(dax.token, "GET", `/api/colosseum/${duelId}`)).body;
+  ok(seenByDax.challenger.call === null && /^[0-9a-f]{64}$/.test(seenByDax.challenger.commit), "a rival sees only the hash of the challenger's call until the fight");
+  const committed = await until("challenger's receipt on Solana", async () => {
+    const d = (await call(cara.token, "GET", `/api/colosseum/${duelId}`)).body;
+    return d.challenger.receipt?.status === "onchain" ? d : null;
+  });
+  ok(committed.challenger.receipt.verified === true && committed.challenger.receipt.memo === `stakeclash:v1:call:${duelId}:${cara.player.id}:${committed.challenger.commit}`, "the call is committed in a Solana memo, confirmed and checked via the Stream");
+  const daxArmy = (await call(dax.token, "GET", "/api/me")).body.army;
+  ok((await call(cara.token, "POST", `/api/colosseum/${duelId}/accept`, { units: caraArmy, side: "no", confBps: 6000, requestId: crypto.randomUUID().replace(/-/g, "") })).status === 400, "you can't accept your own challenge");
+  const acc = await call(dax.token, "POST", `/api/colosseum/${duelId}/accept`, { units: daxArmy, side: "no", confBps: 6000, requestId: crypto.randomUUID().replace(/-/g, "") });
+  const fought = acc.body.duel;
+  const replayDuel = simulate({ attacker: { units: acc.body.battle.attacker.units, levels: acc.body.battle.attacker.levels, boosts: acc.body.battle.attacker.boosts, vigor: acc.body.battle.attacker.vigor }, defender: acc.body.battle.defender, seed: acc.body.battle.seed });
+  ok(acc.status === 200 && fought.status === "fought" && fought.steel.pot === 190 && replayDuel.winner === acc.body.battle.result.winner, "answering fights at once; the replay matches; the steel half (190 of a 400 pot, 5% burned) goes to the winner");
+  const mightAfter = [(await call(cara.token, "GET", "/api/me")).body.might, (await call(dax.token, "GET", "/api/me")).body.might];
+  const steelToCara = fought.steel.winner === cara.player.id;
+  ok(mightAfter[0] === 800 + (steelToCara ? 190 : 0) && mightAfter[1] === 800 + (steelToCara ? 0 : 190), "Might moves exactly: both staked 200, the winner got the steel half");
+  ok((await call(cara.token, "GET", "/api/me")).body.army.infantry === caraArmy.infantry, "arena fights are to first blood: no units are lost");
+  const revealed = (await call(dax.token, "GET", `/api/colosseum/${duelId}`)).body;
+  const c = revealed.challenger.call;
+  const recomputed = crypto.createHash("sha256").update(`stakeclash:v1|${duelId}|${cara.player.id}|${mkt.market}|${c.side}|${c.confBps}|${c.priceBps}|${c.at}|${c.salt}`).digest("hex");
+  ok(c.side === "yes" && c.confBps === 7000 && recomputed === revealed.challenger.commit, "after the fight the call is revealed and anyone can recompute its committed hash");
+  await call(cara.token, "POST", `/api/dev/duel-settle/${duelId}`, { side: "yes" });
+  const settled = await until("duel seal on Solana", async () => {
+    const d = (await call(cara.token, "GET", `/api/colosseum/${duelId}`)).body;
+    return d.status === "settled" && d.seal?.status === "onchain" ? d : null;
+  });
+  // Cara said YES at 70% (Brier 0.09), Dax NO at 60% (Brier 0.36): Cara made the better call
+  ok(settled.foresight.outcome === "yes" && settled.foresight.winner === cara.player.id && settled.challenger.brier === 0.09 && settled.rival.brier === 0.36, "when Gemini settles, the better-calibrated call takes the foresight half");
+  ok(settled.seal.verified === true && settled.seal.memo === `stakeclash:v1:duel:${duelId}:${settled.hash}`, "the full result is sealed in a Solana memo and checked via the Stream");
+  ok((await call(cara.token, "GET", "/api/me")).body.might === 800 + (steelToCara ? 190 : 0) + 190, "the foresight half lands in the winner's Might");
+  const caraMe = (await call(cara.token, "GET", "/api/me")).body;
+  ok(!!caraMe.badges.gladiator === steelToCara || !!(await call(dax.token, "GET", "/api/me")).body.badges.gladiator === !steelToCara, "the steel winner earns the Gladiator badge");
+  const openNow = (await call(cara.token, "GET", "/api/odds/markets")).body.markets.filter((m: any) => m.market !== mkt.market);
+  const ch2 = (await call(cara.token, "POST", "/api/colosseum/challenge", { units: caraArmy, stake: 50, market: openNow[0].market, side: "no", confBps: 5500, requestId: crypto.randomUUID().replace(/-/g, "") })).body;
+  if (!ch2.duel) throw new Error(`second challenge refused: ${ch2.error}`);
+  const before = (await call(cara.token, "GET", "/api/me")).body.might;
+  const cancel = await call(cara.token, "POST", `/api/colosseum/${ch2.duel.id}/cancel`, {});
+  ok(cancel.status === 200 && cancel.body.might === before + 50, "cancelling an open challenge returns the stake");
+  const ch3 = (await call(cara.token, "POST", "/api/colosseum/challenge", { units: caraArmy, stake: 0, market: openNow[0].market, side: "yes", confBps: 8000, requestId: crypto.randomUUID().replace(/-/g, "") })).body;
+  await call(cara.token, "POST", "/api/dev/duel-bot", {});
+  const botDuel = (await call(cara.token, "GET", `/api/colosseum/${ch3.duel.id}`)).body;
+  ok(botDuel.status === "fought" && botDuel.rival.bot && ["momentum", "contrarian"].includes(botDuel.rival.style) && botDuel.rival.call, "rival warlords answer untaken challenges, each trading with its own style");
+  const board = (await call(cara.token, "GET", "/api/colosseum")).body;
+  ok(board.board.some((r: any) => r.name === "Cara" && r.duels === 2) && board.mine.length >= 3, "duels count in the rankings and in My duels");
+  }
 
   console.log("\nBadge metadata");
   const meta = await (await fetch(`${gameUrl}/meta/oracle.json`)).json();

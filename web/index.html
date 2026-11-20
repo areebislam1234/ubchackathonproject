@@ -56,7 +56,7 @@
       <div id="realm-title" class="realm-title" aria-live="polite"></div>
       <div id="prompt" class="prompt panel dark" hidden></div>
       <div id="recall" class="recall panel dark" hidden><span id="recall-text">Recalling home…</span><span class="recall-bar"><i id="recall-fill"></i></span></div>
-      <div class="ticker panel dark" aria-live="polite"><span class="ticker-label">On-chain feed</span><span id="ticker-text">Listening to the realm…</span></div>
+      <div class="ticker panel dark" id="ticker" aria-live="polite"><span class="ticker-label" id="ticker-label">Realm news</span><span id="ticker-text">Listening to the realm…</span></div>
       <nav class="dock" aria-label="Main">
         <button class="dock-btn" id="btn-home" data-key="H" title="Recall to your fortress"><span class="dock-icon" data-icon="flag"></span><span>Home</span><kbd>H</kbd></button>
         <button class="dock-btn" id="btn-map" data-key="M"><span class="dock-icon" data-icon="map"></span><span>Map</span><kbd>M</kbd></button>
@@ -65,6 +65,8 @@
         <button class="dock-btn" id="btn-bank" data-key="T" title="Treasury: deposit, invest, convert yield"><span class="dock-icon" data-icon="coin"></span><span>Bank</span><kbd>T</kbd></button>
         <button class="dock-btn" id="btn-bag" data-key="B" title="Your bag: boss loot"><span class="dock-icon" data-icon="chest"></span><span>Bag</span><kbd>B</kbd><span class="dock-badge" id="bag-badge" hidden></span></button>
         <button class="dock-btn" id="btn-intel" data-key="I" title="Intelligence reports from bosses"><span class="dock-icon" data-icon="eye"></span><span>Intel</span><kbd>I</kbd><span class="dock-badge" id="intel-badge" hidden></span></button>
+        <button class="dock-btn" id="btn-arena" data-key="K" title="The Colosseum: 1v1 duels for Might on a live market"><span class="dock-icon" data-icon="swords"></span><span>Arena</span><kbd>K</kbd></button>
+        <button class="dock-btn" id="btn-odds" data-key="O" title="Odds board: movers, the town crier, odds over time"><span class="dock-icon" data-icon="chart"></span><span>Odds</span><kbd>O</kbd></button>
         <button class="dock-btn" id="btn-profile" data-key="P"><span class="dock-icon" data-icon="person"></span><span>Profile</span><kbd>P</kbd></button>
         <button class="dock-btn" id="btn-dev" data-key="`" hidden title="Dev tools for demos"><span class="dock-icon" data-icon="bolt"></span><span>Dev</span><kbd>`</kbd></button>
         <button class="dock-btn small" id="btn-sound" aria-pressed="true" title="Sound"><span id="sound-label">♪</span></button>
