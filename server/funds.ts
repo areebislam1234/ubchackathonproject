@@ -1,5 +1,5 @@
 // The yield economy: a player's USDC in the game, investments at real market prices, realized
-// yield converted into Might, and Mastery bought with Might.
+// yield converted into Might (which unlocks class abilities).
 //
 // Rules this file enforces:
 //   - money is integer micro-USDC (6 decimals) and only ever changes here, on the server
@@ -168,7 +168,7 @@ export async function sell(p: Player, coinIn: unknown, qtyIn: unknown, requestId
   return remember(p, requestId as string, { ok: true, fill: entry, funds: fundsView(p, [q]) });
 }
 
-// ── Yield → Might → Mastery ───────────────────────────────────────────
+// ── Yield → Might ───────────────────────────────────────────────────────────────────────────────────────────────
 /** Convert realized yield (never principal) into Might at the published rate. */
 export function convert(p: Player, usdcIn: unknown, requestId: unknown) {
   const prev = claimed(p, requestId);

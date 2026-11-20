@@ -10,6 +10,7 @@ import { db, type Player } from "./db";
 import { GameError, assignDrill, bySession, disband, logout, markExplored, onBadge, playerView, refundMastery, register, sendHome, setFormation, setLoadout, unlockAbility, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, gemini, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, spawnHot, tick, world } from "./bounties";
 import { acceptChallenge, cancelChallenge, colosseumTick, colosseumView, devBotAccept, duelById, issueChallenge, onReceipt } from "./colosseum";
+import { accrueAll, airdrop, devSetPrice, prepareDeposit, submitDeposit, vaultSummary, vaultTick, vaultView, withdrawSol } from "./vault";
 import { crierLog, crierTick, flushOdds, marketList, movers, oddsSeries, oddsTick, onHotMarket, sampleNow, windowMs } from "./odds";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
 import { challenge, devNextIntel, discoverLairs, lairView, lairsFor } from "./bosses";
@@ -115,7 +116,7 @@ app.get(
       .sort((a, b) => b.predictions[p.id].at - a.predictions[p.id].at)
       .slice(0, 20)
       .map((b) => ({ bounty: b.id, question: b.question, status: b.status, ...b.predictions[p.id] }));
-    return { ...playerView(p), onchain: holdingsFor(p.wallet?.address), predictions };
+    return { ...playerView(p), vault: vaultSummary(p), onchain: holdingsFor(p.wallet?.address), predictions };
   }),
 );
 app.post(
@@ -158,6 +159,13 @@ app.get("/api/battles/:id", auth, wrap((req) => battle(String(req.params.id))));
 app.get("/api/odds/movers", auth, wrap((req) => ({ window: windowMs(req.query.window), movers: movers(windowMs(req.query.window), 16), crier: crierLog(10), now: Date.now() })));
 app.get("/api/odds/markets", auth, wrap(() => ({ markets: marketList(), now: Date.now() })));
 app.get("/api/odds/:market", auth, wrap((req) => oddsSeries(String(req.params.market), windowMs(req.query.window))));
+
+// ── The SOL vault: deposit SOL, earn Might as its price rises ─────────
+app.get("/api/vault", auth, wrap((req) => vaultView(req.player)));
+app.post("/api/vault/deposit/prepare", auth, wrap((req) => prepareDeposit(req.player, req.body?.sol)));
+app.post("/api/vault/deposit/submit", auth, wrap((req) => submitDeposit(req.player, req.body ?? {})));
+app.post("/api/vault/withdraw", auth, wrap((req) => withdrawSol(req.player, req.body ?? {})));
+app.post("/api/vault/airdrop", auth, wrap((req) => airdrop(req.player)));
 
 // ── The Colosseum ─────────────────────────────────────────────────────
 app.get("/api/colosseum", auth, wrap((req) => colosseumView(req.player)));
@@ -367,6 +375,8 @@ app.post(
   }),
 );
 app.get("/api/dev/bounties", devOnly, auth, wrap(() => ({ bounties: devList(), now: Date.now() })));
+app.post("/api/dev/sol-price", devOnly, auth, wrap(async (req) => ({ price: await devSetPrice(req.body ?? {}) })));
+app.post("/api/dev/vault-tick", devOnly, auth, wrap(async (req) => (await accrueAll(), vaultView(req.player))));
 app.post("/api/dev/duel-bot", devOnly, auth, wrap((req) => ({ accepted: devBotAccept(req.player) })));
 app.post(
   "/api/dev/duel-settle/:id",
@@ -492,6 +502,7 @@ app.listen(env.gamePort, () => {
   setInterval(() => {
     void oddsTick(marketsForOdds); // record Gemini odds; the town crier announces big movers
     void colosseumTick(); // rival warlords answer challenges; settled markets pay the foresight half
+    void vaultTick(); // value every SOL vault at Gemini's price; growth above the high-water mark becomes Might
   }, 1500);
   resumeCompiling();
   console.log(`intel: ${env.intel ? "live sources (sample data when unreachable)" : "off, sample data only"}`);

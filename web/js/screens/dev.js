@@ -169,6 +169,14 @@ function arenaTab(G) {
       <button class="btn btn-small btn-go" id="d-colo">Open the Colosseum</button>
     </div>
     <p class="note">Rivals also answer on their own after a short wait. Settle a fought duel's market from its card in My duels (mock Gemini only).</p>
+    <h3>SOL vault</h3>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn btn-small btn-gold" data-solpct="5">SOL +5% (demo price)</button>
+      <button class="btn btn-small btn-blue" data-solpct="-5">SOL −5%</button>
+      <button class="btn btn-small btn-ghost" id="d-sol-live">Back to Gemini's live price</button>
+      <button class="btn btn-small btn-go" id="d-vault">Open the vault</button>
+    </div>
+    <p class="note">A demo price replaces Gemini's live SOL/USD everywhere until you go back to live. Vaults are revalued at once, so a rise pays Might right away.</p>
     <h3>Odds and the town crier</h3>
     <div class="row" style="flex-wrap:wrap">
       <button class="btn btn-small btn-gold" data-shock="0.18">Jolt a random market up</button>
@@ -314,6 +322,16 @@ function wire(G, body) {
   });
   on("#d-colo", async () => G.openColosseum({ tab: "mine" }));
   on("#d-odds", async () => G.openOdds());
+  each("[data-solpct]", async (b) => {
+    const r = await api("/api/dev/sol-price", { body: { pct: Number(b.dataset.solpct) } });
+    await G.refreshMe();
+    toast(`SOL demo price: $${r.price.usd.toFixed(2)}`, "gold");
+  });
+  on("#d-sol-live", async () => {
+    const r = await api("/api/dev/sol-price", { body: { live: true } });
+    toast(r.price ? `Live SOL price: $${r.price.usd.toFixed(2)}` : "Back to live (no price reachable right now).", "good");
+  });
+  on("#d-vault", async () => G.openVault());
   each("[data-shock]", async (b) => {
     const r = await api("/api/dev/shock", { body: { delta: Number(b.dataset.shock) } });
     toast(r.crier ? `Jolted “${r.crier}”. The crier is shouting about it.` : `Jolted ${r.shocked}.`, "gold");

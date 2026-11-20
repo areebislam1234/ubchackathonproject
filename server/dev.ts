@@ -72,6 +72,6 @@ export function resetProgress(p: Player) {
   delete p.inventory;
   delete p.intel;
   delete p.drills;
-  // funds, Might and Mastery are left alone: they track real deposits held by the game
+  // funds and Might are left alone: they track real deposits held by the game
   db.save();
 }

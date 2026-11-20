@@ -6,6 +6,7 @@ import { badgeMints, MEMO_PREFIX } from "./solana";
 import { confirmWithdrawal, creditDeposit } from "../funds";
 import { applyDuelMemo } from "../colosseum";
 import { ingestTransaction } from "./indexer";
+import { applyVaultMemo } from "../vault";
 
 export type StreamEvent = {
   signature: string;
@@ -87,6 +88,8 @@ export function applyEvents(events: StreamEvent[]) {
           st.signature = e.signature;
           feed({ kind: "chain", text: `Solana: ${p.name}'s ${(BADGES as any)[badge]?.name ?? badge} badge confirmed (slot ${e.slot})`, signature: e.signature, player: p.id });
         }
+      } else if (parts[2] === "vault") {
+        applyVaultMemo(parts.slice(3), e.signature); // SOL vault deposits, seen on-chain by the Stream
       } else if (parts[2] === "call" || parts[2] === "duel") {
         applyDuelMemo(parts[2], parts.slice(3), e.signature, e.slot); // Colosseum odds receipts and results
       } else if (parts[2] === "withdraw") {

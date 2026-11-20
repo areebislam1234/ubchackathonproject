@@ -174,3 +174,48 @@ export async function connectStandard(wallet) {
 }
 
 export const b64 = (bytes) => btoa(String.fromCharCode(...bytes));
+
+// ── Signing a deposit transaction ─────────────────────────────────────
+const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const toB64 = (bytes) => {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+/** The installed wallet behind a linked Phantom / MetaMask / Wallet Standard link. */
+function linkedStandardWallet(link) {
+  const name = link.kind === "phantom" ? /phantom/i : new RegExp((link.label ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  return standard.find((w) => name.test(w.name ?? "") && w.features?.["standard:connect"]) ?? null;
+}
+
+/**
+ * Have the linked wallet sign the transaction the game prepared. Returns { tx } (signed, for the
+ * game to send) or { signature } (the wallet sent it itself).
+ */
+export async function signPrepared(playerId, link, prep) {
+  const bytes = fromB64(prep.tx);
+  if (link.kind === "ingame") {
+    const w = await loadIngame(playerId);
+    if (!w || w.address !== prep.from) throw new Error("This browser doesn't hold your in-game wallet's key. Import it in Profile → Solana wallet (I have a key).");
+    const nSig = bytes[0];
+    const message = bytes.subarray(1 + 64 * nSig);
+    bytes.set(await w.sign(message), 1);
+    return { tx: toB64(bytes) };
+  }
+  const wallet = linkedStandardWallet(link);
+  if (!wallet) throw new Error(`${link.label ?? "Your wallet"} isn't available in this browser. Open it (unlocked), then try again.`);
+  const { accounts } = await wallet.features["standard:connect"].connect();
+  const account = accounts.find((a) => a.address === prep.from);
+  if (!account) throw new Error(`Switch ${wallet.name} to the account you linked (${prep.from.slice(0, 4)}…${prep.from.slice(-4)}), then try again.`);
+  const chain = prep.chain === "solana:devnet" ? prep.chain : undefined;
+  if (wallet.features["solana:signTransaction"]) {
+    const [out] = await wallet.features["solana:signTransaction"].signTransaction({ account, transaction: bytes, ...(chain ? { chain } : {}) });
+    return { tx: toB64(out.signedTransaction) };
+  }
+  if (wallet.features["solana:signAndSendTransaction"]) {
+    const [out] = await wallet.features["solana:signAndSendTransaction"].signAndSendTransaction({ account, transaction: bytes, chain: chain ?? "solana:devnet" });
+    return { signature: b58encode(out.signature) };
+  }
+  throw new Error(`${wallet.name} can't sign Solana transactions here.`);
+}

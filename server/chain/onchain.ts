@@ -31,7 +31,7 @@ export type QueueItem = {
   error?: string;
 };
 
-type Shadow = { gold: number; might: number; registered: boolean };
+type Shadow = { gold: number; might: number; registered: boolean; growth?: { might: number; usd: number }; vaultYield?: number };
 type OnchainState = {
   seq: number;
   queue: QueueItem[];
@@ -158,12 +158,24 @@ export function onYieldConverted(p: Player, usdc: number, might: number) {
   if (p.bot) return;
   ensureRegistered(p);
   shadowOf(p.id).might += might;
-  const realized = (p.funds?.converted ?? 0);
+  const realized = (p.funds?.converted ?? 0) + (shadowOf(p.id).vaultYield ?? 0);
   const w = keyOf(p.id);
   enqueue("convert", { usdc, might }, p.id, [
     { name: "MightMinted", data: { v: V, wallet: w, amount: might, reason: 0 } },
     { name: "YieldConverted", data: { v: V, wallet: w, usdc, might, realized_total: realized } },
   ]);
+}
+
+/**
+ * SOL vault growth turned into Might (it accrues every price tick). Collected here and settled every
+ * 30 seconds as one yield conversion, instead of a transaction per tick.
+ */
+export function onVaultGrowth(p: Player, might: number, usdMicro: number) {
+  if (p.bot || might <= 0) return;
+  const sh = shadowOf(p.id);
+  sh.growth ??= { might: 0, usd: 0 };
+  sh.growth.might += might;
+  sh.growth.usd += usdMicro;
 }
 
 /**
@@ -255,6 +267,17 @@ export function settle(p: Player, mightOffset = 0, goldOffset = 0) {
   if (dg !== 0) {
     sh.gold += dg;
     enqueue("gold", { delta: dg, reason: "net" }, p.id, [{ name: "GoldSettled", data: { v: V, wallet: w, delta: dg, balance: sh.gold, reason: sh.gold === dg ? "migration" : "net" } }]);
+  }
+  // vault growth since the last settlement goes on-chain as realized yield, not as a generic mint
+  if (sh.growth && sh.growth.might > 0) {
+    const g = sh.growth;
+    sh.growth = { might: 0, usd: 0 };
+    sh.might += g.might;
+    sh.vaultYield = (sh.vaultYield ?? 0) + g.usd;
+    enqueue("convert", { usdc: g.usd, might: g.might }, p.id, [
+      { name: "MightMinted", data: { v: V, wallet: w, amount: g.might, reason: 0 } },
+      { name: "YieldConverted", data: { v: V, wallet: w, usdc: g.usd, might: g.might, realized_total: (p.funds?.converted ?? 0) + sh.vaultYield } },
+    ]);
   }
   const dm = Math.floor(p.might ?? 0) + mightOffset - sh.might;
   if (dm > 0) {
