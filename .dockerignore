@@ -1,0 +1,7 @@
+node_modules
+target
+.data
+.env
+.git
+programs/*/target
+*.log
