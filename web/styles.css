@@ -1391,3 +1391,192 @@ code {
   color: var(--outline);
   text-shadow: 1px 1px 0 #fff;
 }
+
+/* intelligence */
+.dossiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.dossier {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  padding: 10px 12px;
+  background: #f8ecc9;
+  border: var(--px) solid var(--parch-dd);
+  border-left-width: 8px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.dossier:hover,
+.dossier:focus-visible {
+  background: #fdf0c4;
+  outline: none;
+  border-color: var(--wood-d);
+}
+.dossier.r-rare,
+.report.r-rare {
+  border-left-color: var(--blue-l);
+}
+.dossier.r-epic,
+.report.r-epic {
+  border-left-color: var(--crystal);
+}
+.dossier.r-legendary,
+.report.r-legendary {
+  border-left-color: var(--gold-d);
+  background: #fff6cf;
+}
+.dossier-top,
+.dossier-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.dossier-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 400 17px var(--display);
+  color: var(--wood-d);
+}
+.dossier-rar {
+  padding: 0 6px;
+  border: 2px solid var(--outline);
+  font: 400 15px var(--display);
+  text-transform: capitalize;
+  color: var(--outline);
+}
+.dossier-title {
+  font: 400 23px/1.05 var(--display);
+}
+.dossier-q {
+  font-size: 13px;
+  color: #5c3a1d;
+}
+.stamp {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 2px solid currentColor;
+  font: 400 15px var(--display);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transform: rotate(-2deg);
+}
+.stamp.small {
+  font-size: 13px;
+  padding: 0 4px;
+}
+.stamp.live {
+  color: var(--green-d);
+}
+.stamp.partial {
+  color: var(--gold-d);
+}
+.stamp.sample {
+  color: var(--red-d);
+}
+.stamp.decoding {
+  color: var(--stone-d);
+  animation: blink 1s steps(2) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.report {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: #f8ecc9;
+  border: var(--px) solid var(--parch-dd);
+  border-left-width: 8px;
+}
+.report-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.report-boss {
+  image-rendering: pixelated;
+  width: 48px;
+  height: 48px;
+}
+.rsec {
+  margin-top: 12px;
+}
+.rsec h3 {
+  margin: 0 0 6px;
+}
+.rfacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.rfact {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--parch-d);
+  border: 2px solid var(--parch-dd);
+}
+.rfact span {
+  font-size: 12px;
+  color: #5c3a1d;
+}
+.rfact b {
+  font: 400 21px var(--display);
+}
+.rfact.good b {
+  color: var(--green-d);
+}
+.rfact.bad b {
+  color: var(--red-d);
+}
+.rtable-wrap {
+  overflow-x: auto;
+}
+.rtable td,
+.rtable th {
+  white-space: nowrap;
+}
+.rlist {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+.rchart {
+  margin: 0;
+}
+.rchart svg {
+  width: 100%;
+  height: 120px;
+  background: var(--parch-d);
+  border: 2px solid var(--parch-dd);
+}
+.decoding-box {
+  animation: blink 1.2s steps(2) infinite;
+}
+.report-meta {
+  margin-top: 12px;
+}
+@media (max-width: 560px) {
+  /* nine dock buttons: icons only on phones */
+  .dock-btn > span:nth-child(2) {
+    display: none;
+  }
+  .dock-btn {
+    padding: 8px 2px;
+  }
+  .dock-badge {
+    top: 1px;
+    right: 1px;
+    min-width: 16px;
+    font-size: 12px;
+    line-height: 13px;
+  }
+}

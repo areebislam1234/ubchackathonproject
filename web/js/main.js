@@ -15,6 +15,7 @@ import { battleOpen } from "./screens/battle.js";
 import { openDev } from "./screens/dev.js";
 import { openLair, refreshLairSheet } from "./screens/lair.js";
 import { openInventory, unseenCount } from "./screens/inventory.js";
+import { openIntel } from "./screens/intel.js";
 
 // Shared game context handed to every screen.
 export const G = {
@@ -32,6 +33,7 @@ export const G = {
   refreshLairs,
   openBounty: (id) => openBounty(G, id),
   openLair: (id) => openLair(G, id),
+  openIntel: (id) => openIntel(G, id),
   travelTo,
   setCourse,
 };
@@ -214,6 +216,16 @@ function renderBagBadge() {
   const el = $("bag-badge");
   el.hidden = !n;
   el.textContent = n > 99 ? "99+" : String(n);
+  // unread intelligence reports
+  let seen = 0;
+  try {
+    seen = Number(localStorage.getItem(`stakeclash.intelSeen.${G.me?.id}`) ?? 0);
+  } catch {
+    seen = G.me?.intelCount ?? 0;
+  }
+  const unread = Math.max(0, (G.me?.intelCount ?? 0) - seen);
+  $("intel-badge").hidden = !unread;
+  $("intel-badge").textContent = String(unread);
 }
 G.renderBagBadge = renderBagBadge;
 
@@ -481,6 +493,7 @@ $("btn-map").addEventListener("click", () => openMap(G));
 $("btn-fortress").addEventListener("click", () => openFortress(G));
 $("btn-army").addEventListener("click", () => openArmy(G));
 $("btn-bag").addEventListener("click", () => openInventory(G));
+$("btn-intel").addEventListener("click", () => openIntel(G));
 $("btn-profile").addEventListener("click", () => openProfile(G));
 $("btn-dev").addEventListener("click", () => openDev(G));
 $("hud-chief").addEventListener("click", () => openProfile(G));
@@ -509,6 +522,7 @@ addEventListener("keydown", (e) => {
   if (k === "f") openFortress(G);
   if (k === "r") openArmy(G);
   if (k === "b") openInventory(G);
+  if (k === "i") openIntel(G);
   if (k === "p") openProfile(G);
 });
 

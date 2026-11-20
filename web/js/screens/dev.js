@@ -1,6 +1,6 @@
 // Dev panel for demos: edit your warlord, jump around the world, and steer bounties.
-import { BADGES, BADGE_IDS, BUILDINGS, UNITS, UNIT_KEYS } from "/shared/rules.js";
-import { REALMS } from "/shared/world.js";
+import { BADGES, BADGE_IDS, BOSSES, BOSS_TIERS, BUILDINGS, MATERIAL_KEYS, RELIC_KEYS, UNITS, UNIT_KEYS } from "/shared/rules.js";
+import { REALMS, placeBossLairs } from "/shared/world.js";
 import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { act, closeSheet, esc, fmt, openSheet, timeLeft, toast } from "../ui.js";
@@ -20,12 +20,13 @@ export async function openDev(G) {
     ["warlord", "Warlord"],
     ["world", "World"],
     ["bounties", "Bounties"],
+    ["bosses", "Bosses"],
   ];
   const html = `
     <h2>Dev tools</h2>
     <p class="sub">For demos. Changes apply to your warlord instantly. Turn this panel off with <code>DEV_TOOLS=off</code> before sharing the game publicly.</p>
     <div class="chips" style="margin-bottom:12px">${tabs.map(([k, l]) => `<button class="chip" data-tab="${k}" aria-pressed="${tab === k}">${l}</button>`).join("")}</div>
-    <div id="dtab">${tab === "warlord" ? warlordTab(G) : tab === "world" ? worldTab(G) : await bountiesTab(G)}</div>`;
+    <div id="dtab">${tab === "warlord" ? warlordTab(G) : tab === "world" ? worldTab(G) : tab === "bosses" ? bossesTab(G) : await bountiesTab(G)}</div>`;
   const body = openSheet("dev", html);
   for (const b of body.querySelectorAll("[data-tab]"))
     b.addEventListener("click", () => {
@@ -129,6 +130,32 @@ async function bountiesTab(G) {
 }
 
 // ── Wiring ────────────────────────────────────────────────────────────
+// ── Bosses ────────────────────────────────────────────────────────────
+let allLairs = null;
+function bossesTab(G) {
+  allLairs ??= placeBossLairs(G.world, BOSSES);
+  const found = new Set(G.lairs.map((l) => l.id));
+  const order = { legendary: 0, epic: 1, rare: 2, common: 3 };
+  const rows = [...allLairs].sort((a, b) => order[a.tier] - order[b.tier] || a.realm.localeCompare(b.realm));
+  return `
+    <h3>Loot</h3>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn btn-small btn-go" id="d-loot">Fill the Bag: 30 materials, a manual per unit, 3 scrolls</button>
+      <button class="btn btn-small btn-gold" id="d-relics">Grant every relic</button>
+      <button class="btn btn-small btn-blue" id="d-cool">Reset all boss cooldowns</button>
+    </div>
+    <h3>Intelligence</h3>
+    <div class="row" style="flex-wrap:wrap">
+      <span class="note">Next boss win drops a report of rarity:</span>
+      ${["common", "rare", "epic", "legendary"].map((r) => `<button class="btn btn-small btn-ghost" data-intel="${r}">${r}</button>`).join("")}
+    </div>
+    <p class="note">Arena Plains bosses carry sports intel, Ironvein crypto, Goldmarsh economics, the rest general (politics, weather, commodities, culture).</p>
+    <h3>Every lair <span class="note">(${found.size}/${allLairs.length} found)</span></h3>
+    <table class="board"><thead><tr><th>Boss</th><th>Tier</th><th>Realm</th><th></th></tr></thead><tbody>${rows
+      .map((l) => `<tr><td>${esc(BOSSES[l.id].name)}${found.has(l.id) ? "" : ' <span class="note">(unfound)</span>'}</td><td>${esc(BOSS_TIERS[l.tier].name)}</td><td>${esc(REALMS.find((r) => r.id === l.realm)?.name ?? l.realm)}</td><td><button class="btn btn-small btn-blue" data-lair="${l.x},${l.y}">Go</button></td></tr>`)
+      .join("")}</tbody></table>`;
+}
+
 function teleport(G, x, y) {
   G.view.teleport(x, y);
   closeSheet();
@@ -224,6 +251,27 @@ function wire(G, body) {
     teleport(G, r.x, r.y + 2);
   });
   each("[data-goto]", async (b) => teleport(G, Number(b.dataset.x), Number(b.dataset.y) + 2));
+  // bosses
+  each("[data-lair]", async (b) => {
+    const [x, y] = b.dataset.lair.split(",").map(Number);
+    teleport(G, x, y + 3);
+    setTimeout(() => G.refreshLairs(), 1800);
+  });
+  on("#d-loot", async () => {
+    const inv = G.me.inventory ?? { materials: {}, manuals: {}, scrolls: 0 };
+    await setPlayer(G, { inventory: { materials: Object.fromEntries(MATERIAL_KEYS.map((k) => [k, (inv.materials[k] ?? 0) + 10])), manuals: Object.fromEntries(UNIT_KEYS.map((k) => [k, (inv.manuals[k] ?? 0) + 1])), scrolls: (inv.scrolls ?? 0) + 3 } }, "Bag filled.");
+    rerender();
+  });
+  on("#d-relics", async () => (await setPlayer(G, { inventory: { relics: RELIC_KEYS } }, "Every relic granted."), rerender()));
+  on("#d-cool", async () => {
+    await api("/api/dev/boss-cooldowns", { body: {} });
+    await G.refreshLairs();
+    toast("Every boss is back in its lair.", "good");
+  });
+  each("[data-intel]", async (b) => {
+    await api("/api/dev/next-intel", { body: { rarity: b.dataset.intel } });
+    toast(`Your next boss win drops a ${b.dataset.intel} intelligence report.`, "good");
+  });
   each("[data-dev-act]", async (b) => {
     const [k, side] = b.dataset.devAct.split("-");
     if (k === "start") await api(`/api/dev/start/${b.dataset.id}`, { body: {} });

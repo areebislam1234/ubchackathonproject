@@ -25,6 +25,47 @@ Built for UBC 2026 from our design doc. Its three technologies each have a disti
 | ![World map](docs/map.png) | ![Bounty](docs/bounty.png) |
 | ![Battle](docs/battle.png) | ![The revealed question](docs/prediction.png) |
 
+## Bosses, loot and intelligence
+
+Away from the bounties, **21 bosses** guard fixed lairs across the seven realms. Find one by exploring (a "Boss sighted" toast; legendary bosses shake the ground), walk up to it and press **E**.
+
+| Tier | How it looks | Who can beat it | Loot |
+|---|---|---|---|
+| Common | Hero-sized, ring of stones | The starting army | Gold, a few materials, sometimes a training manual |
+| Rare | 1.5× size, blue aura, bones and a torch | An early army (about Keep 2) | More of everything; a small chance of scrolls and relics |
+| Epic | 2× size, purple aura, spiked palisade, braziers | Level-4 armies | Big hauls, frequent manuals, better relic odds |
+| Legendary | 3× size, scorched ground, flame aura, skull totems | Maxed armies only | The best loot; intel drops 70% of the time |
+
+- **Battles** use the same deterministic simulator as bounties: your army against the boss's guards plus the boss itself as one huge champion unit. Siege and Tanks hit bosses hard; arrows barely scratch them. Units that fall are lost.
+- **Fair play.** Rewards are rolled and paid on the server. You must stand at the lair, and every attempt (won or lost) sends the boss back to its den for a while (5 to 60 minutes by tier). Each challenge carries a request id, so a retried or duplicated request returns the stored result instead of fighting or paying twice.
+- **The Bag (B)** holds the loot:
+  - **Materials** take 20 gold off a building upgrade each, up to half its price. Tick "use materials" in the Fortress.
+  - **Training manuals** level one unit type for free; **upgrade scrolls** level any unit. Both stay within the Training Grounds cap.
+  - **Relics** are permanent: extra vault capacity, extra watchtowers when rivals attack you, or damage bonuses the battle simulator applies.
+- **Badges:** Boss Slayer, Giant Killer (a legendary), Relic Hunter (3 relics) and Spymaster (10 reports) mint like the others.
+- Every boss number and drop chance lives in `shared/rules.js` (`BOSS_TIERS`, `BOSSES`, `RELICS`).
+
+### Intelligence reports (I)
+
+Bosses sometimes carry an **intelligence report**: real data about **one specific market**. The bosses of Arena Plains carry sports intel, Ironvein crypto, Goldmarsh economics, and the other realms general intel (politics, weather, commodities, culture).
+
+1. **Which market.** Your open call first, then a bounty you fought in, then an open Gemini market in that category. A market still sealed inside an unrevealed bounty is never used, so intel can't spoil a blind bounty.
+2. **What it asks.** The market is read into a scenario using Gemini's own fields (the league in the ticker, the teams in `participants`, the contract's `strike`): an award race, a match, a points total, a spread, a player prop, a price strike, an economic threshold or a weather range.
+3. **The data that answers it.** "Shai Gilgeous-Alexander wins MVP" gets his season stats against the other contenders, his recent games and both teams' records. "More than 231.5 points" gets both teams' scoring and how often their games went over 231.5. "BTC $61,200 or above" gets the distance to the strike and how often BTC has moved that far in that much time.
+
+| Category | Live sources (no keys) |
+|---|---|
+| Sports | ESPN: athletes, game logs, team records, schedules, team news |
+| Crypto | Gemini exchange price history; **QuickNode** for Solana activity |
+| Economics | World Bank (annual), or FRED monthly series with a free `FRED_API_KEY` |
+| Weather | Open-Meteo forecasts and recent observations |
+| Headlines | GDELT |
+| Odds | Gemini prediction markets |
+
+Rarity sets the depth: a common report has one section, a legendary one has everything plus the market's own odds. Reports are added to your collection the moment the boss falls and fill in a few seconds later. Each is stamped **Live data** or **Sample data**. When a source can't be reached, that part is labelled sample data, never presented as real. `INTEL=off` uses sample data only.
+
+**QuickNode** is used for blockchain data only. Besides the game's own transactions, the Stream filter now summarises one block in every 50 slots (transactions, failure rate, busiest programs, watched-token transfers). The server stores those samples deduplicated by slot, after the same HMAC check. Crypto reports combine them with throughput, epoch and fee data from the QuickNode RPC endpoint. On devnet without a Stream, `USE_LOCAL_STREAM=1` samples blocks the same way.
+
 ## Wallets
 
 Badges need a Solana wallet to mint to. **Profile → Solana wallet** offers four ways, so nobody has to install anything:
@@ -53,15 +94,16 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
 
 - **Move:** WASD / arrows, or click to walk (it finds the way around obstacles). Hold **Shift** to sprint. **E** interacts, scroll zooms, drag looks around.
 - **Terrain:** only what you can see blocks you (trees, rocks, mountain peaks, water). Mountain ranges are walkable rock with peaks scattered on them, and winding passes through every range. Dense forests have trails. A walk anywhere is on average only about 15% longer than a straight line.
-- **Shortcuts:** **H** home, **M** map, **F** fortress, **R** army, **P** profile. Walk up to your fortress and press **E** to manage it.
+- **Shortcuts:** **H** home, **M** map, **F** fortress, **R** army, **B** bag, **I** intel, **P** profile. Walk up to your fortress and press **E** to manage it.
 - **Dev tools** (the **Dev** button in the dock, or the `` ` `` key) cover everything a demo needs:
   - **Warlord:** set gold, Crystals and trophies, step any building or unit level, add troops, grant badges, or **Max everything** in one click. **Reset** puts you back to a new warlord.
   - **World:** reveal the whole map and attune every waystone, teleport to any town, your fortress or exact coordinates, and clear the combat cooldown.
+  - **Bosses:** teleport to any lair, reset boss cooldowns, fill the Bag, grant relics, and choose the rarity of the next intel drop.
   - **Bounties:** spawn one in any realm (choose tier and featured) and jump to it. See every live bounty with its hidden question, and start, end or settle any of them (settling needs mock Gemini).
   - Inside a bounty sheet the same start, end and settle buttons appear.
   - The panel is on by default. Set `DEV_TOOLS=off` in `.env` before sharing the game publicly.
 - **Progress** is saved in `.data/local`. `npm run dev -- --fresh` starts over.
-- **Tests:** `npm test` runs 69 end-to-end checks on a separate stack, so it never touches your game.
+- **Tests:** `npm test` runs 94 end-to-end checks on a separate stack, so it never touches your game.
 
 ## 3-minute demo
 
@@ -172,7 +214,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | Command | Does |
 |---|---|
 | `npm run dev` | Runs everything for the current `NETWORK` (`-- --fresh` wipes local progress) |
-| `npm test` | 69 end-to-end checks on an isolated stack |
+| `npm test` | 94 end-to-end checks on an isolated stack |
 | `npm run setup-solana` | Creates the authority and funds it if possible, then creates the badge mints |
 | `npm run print-filter` | Writes the QuickNode filter with your addresses filled in |
 | `npm run world-preview` | Renders the generated world to `docs/world-map.png` |
@@ -183,7 +225,8 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | Folder | What's in it |
 |---|---|
 | `shared/` | World generator, pixel-art sprites, battle simulator and game rules. These are the same files in the browser and on the server. |
-| `server/` | API, bounty director, players and economy, JSON database, Solana (`chain/solana.ts`), Stream handling (`chain/stream.ts`) |
+| `server/` | API, bounty director, players and economy, boss lairs and loot (`bosses.ts`), JSON database, Solana (`chain/solana.ts`), Stream handling (`chain/stream.ts`) |
+| `server/intel/` | Intelligence reports: market selection, scenario parsing, the data providers and report assembly |
 | `localchain/` | The local Solana RPC (LiteSVM) and the stream relay |
 | `gemini/` | Gemini client and a mock server with the same endpoints |
 | `streams/` | The QuickNode Streams filter |

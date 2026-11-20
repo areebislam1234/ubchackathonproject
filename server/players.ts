@@ -314,6 +314,7 @@ export function playerView(p: Player) {
     inventory: inv,
     relicFx: relicFx(p),
     bossKills: Object.values(p.bosses?.kills ?? {}).reduce((s, n) => s + n, 0),
+    intelCount: p.intel?.length ?? 0,
     derived: {
       capacity: cap,
       housing: housingOf(p.army),

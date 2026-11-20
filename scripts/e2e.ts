@@ -3,7 +3,8 @@
 // Covers the world, blind bounties, exploration, battles (and that replays match the server),
 // rivals, rewards by placement, the revealed question, predictions and Gemini settlement,
 // fortress and army rules, Solana wallet linking, badge minting confirmed via the Stream,
-// sealed results, webhook security and de-duplication, and the QuickNode filter itself.
+// sealed results, webhook security and de-duplication, and the QuickNode filter itself; then boss
+// lairs, boss battles, loot and the Bag, and intelligence reports.
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -22,11 +23,14 @@ Object.assign(process.env, {
   BOUNTY_UPCOMING_SECONDS: "600",
   BOUNTY_ACTIVE_SECONDS: "900",
   PUBLIC_URL: "http://localhost:4610",
+  INTEL: "off", // reports use labelled sample data, so the suite needs no internet
 });
 const { ROOT, gameUrl, geminiBaseUrl } = await import("../server/config");
-const { generateWorld, REALMS, realmForMarket, WORLD_SEED } = await import("../shared/world.js");
+const { generateWorld, REALMS, realmForMarket, WORLD_SEED, placeBossLairs } = await import("../shared/world.js");
+const { mulberry32 } = await import("../shared/rng.js");
+const { parseScenario } = await import("../server/intel/scenario");
 const { simulate } = await import("../shared/battle.js");
-const { payoutFor, crystalsFor, brier, TIERS } = await import("../shared/rules.js");
+const { payoutFor, crystalsFor, brier, TIERS, BOSSES, BOSS_TIERS, rollLoot } = await import("../shared/rules.js");
 const { signStreamPayload } = await import("../shared/hmac");
 const { buildFilter, runFilter } = await import("../server/chain/filter");
 
@@ -281,6 +285,89 @@ try {
   ok(seen.every((b: any) => b.discovered), "reveal uncovers every bounty on the map");
   const rs = (await call(bob.token, "POST", "/api/dev/reset", {})).body;
   ok(rs.gold === 500 && rs.buildings.keep === 1 && rs.army.cavalry === 0, "reset puts the warlord back to a fresh start");
+
+  console.log("\nBoss lairs");
+  const lairs = placeBossLairs(world, BOSSES);
+  ok(lairs.length === Object.keys(BOSSES).length && JSON.stringify(placeBossLairs(generateWorld(WORLD_SEED), BOSSES)) === JSON.stringify(lairs), `all ${lairs.length} lairs are placed, deterministically`);
+  ok(lairs.every((l: any) => world.reachable[(l.y + 1) * world.W + l.x] === 1 && REALMS[world.realm[l.y * world.W + l.x]].id === l.realm), "every lair stands on reachable land in its own realm");
+  const carol = (await call(null, "POST", "/api/register", { name: "Carol", password: "carol-secret-3" })).body;
+  const ct = carol.token;
+  const common = lairs.find((l: any) => l.tier === "common")!;
+  const legend = lairs.find((l: any) => l.tier === "legendary")!;
+  const near = (l: any) => ({ x: l.x, y: l.y + 2 });
+  ok((await call(ct, "GET", `/api/bosses/${legend.id}`)).status === 404, "an undiscovered lair stays hidden");
+  const disc = (await call(ct, "POST", "/api/explore", { cells: [], pos: near(common) })).body;
+  ok(disc.lairs.includes(common.id), "walking up to a lair discovers it");
+  const army0 = { infantry: 6, archer: 4 };
+  ok((await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "far-away-001", pos: { x: common.x + 40, y: common.y } })).status === 400, "you must stand at the lair to challenge it");
+  const bg0 = (await call(ct, "GET", "/api/me")).body.gold;
+  const fightB = (await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-001", pos: near(common) })).body;
+  ok(fightB.win === true && fightB.loot.gold > 0, "the starting army beats a common boss and wins loot");
+  const bossReplay = simulate({ attacker: { units: fightB.battle.attacker.units, levels: fightB.battle.attacker.levels, boosts: fightB.battle.attacker.boosts }, defender: fightB.battle.defender, seed: fightB.battle.seed, record: true });
+  ok(bossReplay.score === fightB.battle.result.score && (bossReplay as any).roster.some((u: any) => u.type === "boss"), "boss fights replay exactly in the browser, champion included");
+  const dupB = (await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-001", pos: near(common) })).body;
+  const bg1 = (await call(ct, "GET", "/api/me")).body.gold;
+  ok(dupB.battle.id === fightB.battle.id && bg1 === bg0 + fightB.loot.goldLanded, "a duplicate request returns the same result and pays only once");
+  ok((await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-002", pos: near(common) })).status === 429, "the boss retreats after every attempt (cooldown)");
+  await call(ct, "POST", "/api/explore", { cells: [], pos: near(legend) });
+  await call(ct, "POST", "/api/dev/player", { army: { infantry: 6, archer: 4 } });
+  const race = await Promise.all(["race-a-0001", "race-b-0001"].map((id) => call(ct, "POST", `/api/bosses/${legend.id}/challenge`, { units: { infantry: 2 }, requestId: id, pos: near(legend) })));
+  ok(race.map((r) => r.status).sort().join() === "200,429", "two challenges at once: exactly one fights");
+  ok(race.find((r) => r.status === 200)!.body.win === false, "a tiny army loses to a legendary boss");
+
+  console.log("\nLoot and the Bag");
+  for (const tier of Object.keys(BOSS_TIERS)) {
+    const rnd = mulberry32(7);
+    let n = 0;
+    for (let i = 0; i < 5000; i++) if (rollLoot(tier, rnd).intel) n++;
+    const want = (BOSS_TIERS as any)[tier].intel.chance;
+    ok(Math.abs(n / 5000 - want) < 0.03, `${tier} bosses drop intel ${(n / 5000).toFixed(2)} of the time (configured ${want}), never guaranteed`);
+  }
+  const maxed = { gold: 5000, buildings: { keep: 5, barracks: 5, training: 5, vault: 5, towers: 5 }, army: { infantry: 6, archer: 6, tank: 3, cavalry: 3, siege: 2 }, unitLevels: { infantry: 5, archer: 5, tank: 5, cavalry: 5, siege: 5 } };
+  await call(ct, "POST", "/api/dev/player", { ...maxed, buildings: { ...maxed.buildings, barracks: 2 }, inventory: { materials: { timber: 10 }, manuals: { infantry: 1 } } });
+  const upB = (await call(ct, "POST", "/api/fortress/upgrade", { building: "barracks", useMaterials: true })).body;
+  ok(upB.materialsUsed === 7 && upB.goldPaid === 300 - 140, "materials take gold off a building upgrade, up to half");
+  await call(ct, "POST", "/api/dev/player", { unitLevels: { infantry: 2 } });
+  const man = await call(ct, "POST", "/api/army/upgrade", { unit: "infantry", use: "manual" });
+  ok(man.status === 200 && man.body.level === 3, "a training manual levels a unit for free");
+  await call(ct, "POST", "/api/dev/player", { buildings: { vault: 1 }, inventory: { relics: ["ledger-scale"] } });
+  ok((await call(ct, "GET", "/api/me")).body.derived.vaultCap === Math.round(1500 * 1.05), "relics give permanent bonuses (vault +5%)");
+
+  console.log("\nIntelligence");
+  const sc = parseScenario({ ticker: "NBAMVP27", title: "2027 NBA MVP", category: "Sports", contracts: [{ label: "Shai Gilgeous-Alexander wins MVP", instrumentSymbol: "A" }, { label: "Nikola Jokić wins MVP", instrumentSymbol: "B" }] }, { label: "Shai Gilgeous-Alexander wins MVP", instrumentSymbol: "A" });
+  ok(sc.type === "award-race" && sc.subject.name === "Shai Gilgeous-Alexander" && sc.rivals[0] === "Nikola Jokić" && sc.league === "NBA", "an MVP market is about that player, with the other contracts as rivals");
+  const tot = parseScenario({ ticker: "NBA-2611200100-LAC-SAS-T", title: "Los Angeles C vs San Antonio: Total Points", category: "Sports", participants: [{ name: "San Antonio Spurs" }, { name: "Los Angeles Clippers" }] }, { label: "More than 231.5 points scored", instrumentSymbol: "T", strike: { type: "over", value: "231.5" } });
+  ok(tot.type === "game-total" && tot.condition?.value === 231.5 && tot.teams?.length === 2, "a points-total market reads the line and both teams");
+  const btc = parseScenario({ ticker: "BTC2611200300", title: "BTC price today at 10pm EST", category: "Crypto" }, { label: "$61,200 or above", instrumentSymbol: "C", strike: { type: "above", value: "61200" } });
+  ok(btc.type === "price-threshold" && btc.symbol === "BTC" && btc.condition?.value === 61200, "a price market reads the coin and the strike");
+  const sp2 = parseScenario({ ticker: "NBA-1-NYK-MIN-S", title: "New York vs Minnesota: Point Spread", category: "Sports" }, { label: "New York wins by more than 9.5 points", instrumentSymbol: "S" });
+  ok(sp2.type === "game-spread" && sp2.subject.name === "New York" && sp2.condition?.value === 9.5, "a spread market reads the team and the margin");
+  // reports (INTEL=off in this suite: sample data, clearly labelled)
+  await call(ct, "POST", "/api/dev/player", maxed);
+  await call(ct, "POST", "/api/dev/boss-cooldowns", {});
+  let drop: any = null;
+  for (let i = 0; i < 6 && !drop; i++) {
+    await call(ct, "POST", "/api/dev/player", { army: maxed.army });
+    await call(ct, "POST", "/api/dev/boss-cooldowns", {});
+    await call(ct, "POST", "/api/dev/next-intel", { rarity: "epic" });
+    const f = (await call(ct, "POST", `/api/bosses/${legend.id}/challenge`, { units: maxed.army, requestId: `intel-${i}-0001`, pos: near(legend) })).body;
+    if (f.win) drop = f.loot.intel;
+  }
+  ok(drop?.rarity === "epic", "a boss win can drop an intelligence report");
+  const filled = await until("report decoded", async () => {
+    const r = (await call(ct, "GET", "/api/intel")).body.reports.find((x: any) => x.id === drop.id);
+    return r?.status === "ready" && r;
+  });
+  ok(filled.sections.length > 0 && filled.live === false && filled.sections.every((s: any) => s.live === false), "with live data unavailable the report is filled and stamped as sample data");
+  ok(!/https?:\/\//.test(JSON.stringify(filled)) && !("_provider" in filled), "reports carry no links and no internal source ids");
+  const sealedQs = (await call(ct, "GET", "/api/dev/bounties")).body.bounties.filter((b: any) => b.status === "active" || b.status === "upcoming").map((b: any) => b.question);
+  ok(!filled.market || !sealedQs.includes(filled.market.question), "a report is never built from a bounty's sealed question");
+  const hook2 = JSON.stringify({ events: [], network: [{ slot: 5000, blockTime: 1, txCount: 10, failed: 1, vote: 6, programs: {}, transfers: {} }] });
+  const n1: any = await (await fetch(`${gameUrl}/webhooks/quicknode`, { method: "POST", headers: { "content-type": "application/json", ...signStreamPayload(process.env.QUICKNODE_WEBHOOK_SECRET!, hook2) }, body: hook2 })).json();
+  const n2: any = await (await fetch(`${gameUrl}/webhooks/quicknode`, { method: "POST", headers: { "content-type": "application/json", ...signStreamPayload(process.env.QUICKNODE_WEBHOOK_SECRET!, hook2) }, body: hook2 })).json();
+  ok(n1.network === 1 && n2.network === 0, "Stream network samples are stored once per slot");
+  const sampled = runFilter(filter, { data: [{ slot: 150, blockTime: 1, transactions: [{ meta: { err: null }, transaction: { signatures: ["N1"], message: { accountKeys: ["x"], instructions: [] } } }] }], metadata: {} });
+  ok(sampled?.network?.[0]?.slot === 150 && sampled.events.length === 0, "the filter samples one block in every 50 for network activity");
 
   console.log("\nBadge metadata");
   const meta = await (await fetch(`${gameUrl}/meta/oracle.json`)).json();
