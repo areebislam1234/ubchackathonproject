@@ -390,7 +390,7 @@ export function attackFormation(p: Player, units: Record<string, number> | undef
     const sent: Record<string, number> = {};
     for (const k of UNIT_KEYS) {
       const n = Math.max(0, Math.floor(Number(units[k] ?? 0) || 0));
-      if (n > (p.army[k] ?? 0)) throw new GameError(`You only have ${p.army[k] ?? 0} ${k}.`);
+      if (!p.bot && n > (p.army[k] ?? 0)) throw new GameError(`You only have ${p.army[k] ?? 0} ${k}.`);
       if (n) sent[k] = n;
     }
     if (!Object.keys(sent).length) throw new GameError("Send at least one unit.");
