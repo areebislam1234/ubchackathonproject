@@ -551,6 +551,57 @@ export function generateWorld(seed = WORLD_SEED) {
   return { W, H, seed, terrain, objects, realm, elev, sea, blocked, walk, reachable, structures, towns, spawn };
 }
 
+/**
+ * Fixed boss lairs. Deterministic from the world seed, so the server and every browser agree on
+ * where each boss lives without storing anything. Weak bosses sit within a short walk of their
+ * realm's town; legendary ones hide in the far corners of the realm.
+ * bosses: { key: { tier, realm } }  →  [{ id, boss, tier, realm, x, y }]
+ */
+const LAIR_TOWN_DIST = { common: 30, rare: 48, epic: 66, legendary: 999 };
+const LAIR_CLEAR = { common: 1, rare: 1, epic: 2, legendary: 2 };
+export function placeBossLairs(world, bosses) {
+  const rnd = mulberry32((world.seed ^ 0xb0551a1) >>> 0);
+  const { W, H, terrain, objects, walk, reachable, realm, towns } = world;
+  const lairs = [];
+  const order = ["legendary", "epic", "rare", "common"];
+  const keys = Object.keys(bosses).sort((a, b) => order.indexOf(bosses[a].tier) - order.indexOf(bosses[b].tier) || (a < b ? -1 : 1));
+  for (const key of keys) {
+    const { tier, realm: realmId } = bosses[key];
+    const k = realmIndex(realmId);
+    const town = towns.find((t) => t.realm === realmId);
+    const clear = LAIR_CLEAR[tier];
+    let best = null;
+    let bestScore = Infinity;
+    for (let attempt = 0, found = 0; attempt < 6000 && found < 80; attempt++) {
+      const x = 6 + Math.floor(rnd() * (W - 12));
+      const y = 6 + Math.floor(rnd() * (H - 12));
+      const i = y * W + x;
+      if (realm[i] !== k || !reachable[i] || !reachable[i + W]) continue;
+      const t = terrain[i];
+      if (t === T.ROAD || t === T.TOWN || t === T.BRIDGE || t === T.BEACH || t === T.MOUNTAIN) continue;
+      let ok = true;
+      for (let dy = -clear; dy <= 1 && ok; dy++)
+        for (let dx = -clear; dx <= clear; dx++) {
+          const j = (y + dy) * W + x + dx;
+          if (!walk[j] || (objects[j] && !isDecal(objects[j]))) ok = false;
+        }
+      if (!ok) continue;
+      // keep clear of every town (player fortresses ring Kingsmarket) and of other lairs
+      if (towns.some((tw) => Math.abs(tw.x - x) + Math.abs(tw.y - y) < 24)) continue;
+      if (lairs.some((l) => Math.abs(l.x - x) + Math.abs(l.y - y) < 28)) continue;
+      found++;
+      const d = town ? Math.hypot(town.x - x, town.y - y) : 0;
+      const score = tier === "legendary" ? -d : Math.abs(d - LAIR_TOWN_DIST[tier]);
+      if (score < bestScore) {
+        bestScore = score;
+        best = { x, y };
+      }
+    }
+    if (best) lairs.push({ id: key, boss: key, tier, realm: realmId, x: best.x, y: best.y });
+  }
+  return lairs;
+}
+
 /** Pick bounty camp sites in a realm: reachable, open ground, away from towns and each other. */
 export function pickBountySite(world, realmId, taken, rnd, minGap = 18) {
   const k = realmIndex(realmId);

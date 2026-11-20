@@ -3,6 +3,7 @@
 // parameters so forests don't look copy-pasted. Shared by the browser (canvas) and the
 // server (badge PNGs).
 import { mulberry32, rand2 } from "./rng.js";
+import { BOSSES } from "./rules.js";
 
 export const PALETTE = {
   k: "#1b1626", // outline
@@ -659,6 +660,231 @@ const ICONS = {
   pin: ["..kkkk..", ".kjjjjk.", "kjjxxjjk", "kjjxxjjk", ".kjjjjk.", "..kjjk..", "...kk...", "........"],
 };
 
+// ── Bosses ────────────────────────────────────────────────────────────
+// Six bodies, drawn facing left (toward the attacker). '1' marks the eyes, recoloured by tier.
+// The top rows are left empty so horns and crowns can be added for the harder tiers.
+const BOSS_BODIES = {
+  ogre: {
+    head: [7, 15, 5],
+    px: [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........kkkkkkk.........",
+      ".......kgggggggk........",
+      "......kgg1ggg1gGk.......",
+      "......kgggggggggGk......",
+      "......kggkxkxkggGk......",
+      ".......kggkkkkgGk.......",
+      ".....kkkkGgggGGkkkk.....",
+      "....kgggkgggggggkggk....",
+      "...kgggkggggggggGkggk...",
+      "..kNkgkggggggggggGkgGk..",
+      ".kNnNkkgggggggggGGkgGk..",
+      ".kNnNkkbbbbbbbbbBBkkgk..",
+      "kNnnNk.kbBbbbbbBBk.kgk..",
+      "kNnnNk.kbbbBbbbbBk..k...",
+      ".kNNk..kGGGk.kGGGk......",
+      ".kNk...kggGk.kggGk......",
+      ".kNk..kgggGk.kgggGk.....",
+      "..k...kkkkkk.kkkkkk.....",
+      "........................",
+    ],
+  },
+  golem: {
+    head: [7, 15, 5],
+    px: [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      ".......kkkkkkkkk........",
+      "......kqqqrrrrrRk.......",
+      "......kq1rrrr1rRk.......",
+      "......krrrrrrrRRk.......",
+      "......kkRkkkkkRkk.......",
+      "..kkkkkqqrrrrrrRkkkkk...",
+      ".kqqrrkqrrrcrrrRkqrrRk..",
+      "kqqrrRkqrrrccrrRkrrRRRk.",
+      "kqrrRRkrrrrrcrrRkrRRRRk.",
+      "krrRRRkrrcrrrrRRkRRRRRk.",
+      "krRRRkkrrccrrrRRkkRRRk..",
+      "kRRRk.kRrrrrrRRRk.kRRk..",
+      ".kkk..kRRRRRRRRRk..kk...",
+      "......kRRRk.kRRRk.......",
+      ".....kqrRRk.kqrRRk......",
+      ".....krrRRk.krrRRk......",
+      ".....krRRRk.krRRRk......",
+      "....kkkkkkk.kkkkkkk.....",
+      "........................",
+    ],
+  },
+  wyrm: {
+    head: [3, 10, 6],
+    px: [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "..............kk........",
+      ".............kFFk...kk..",
+      "...kkkkkk...kFttFk.kFFk.",
+      "..kttttttk.kFttttFkFttk.",
+      ".kt1tttttFkkFtkkttFttFk.",
+      "kxkkttttttFkFk..kttttk..",
+      "kxxkkktttttFFk...kttk...",
+      ".kk...kttyyttFk...kk....",
+      "......kttyyyttFk........",
+      ".....kFttyyytttFk.......",
+      ".....kFttyyyttttFk......",
+      "......kFttyyttttFFk.....",
+      "......kFFtyytttFFFFk..kk",
+      ".......kFFttttFFFFFFkkFk",
+      ".......kFFFtFFFFFFFFFFk.",
+      "......kFFkkFFFkkkkkkkk..",
+      "......kFk..kFFk.........",
+      ".....kFFk..kFFFk........",
+      ".....kkkk..kkkkk........",
+      "........................",
+    ],
+  },
+  lich: {
+    head: [6, 13, 5],
+    px: [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "..................kk....",
+      ".......kkkkkk....kcck...",
+      "......kxxxxxxk..kcxcck..",
+      "......kxkxxkxk...kcck...",
+      "......kx1xx1xk....kk....",
+      "......kxxxkxxk....kbk...",
+      ".......kxkkxk.....kbk...",
+      "......kkPPPPkk....kbk...",
+      ".....kPppppppPk..kxbk...",
+      "....kPpppppppppPkxxk....",
+      "....kKKKKKKKKKKKkxk.....",
+      "....kPpppppppppPkbk.....",
+      "....kPpppppppppPkbk.....",
+      "...kPppppppppppPkbk.....",
+      "...kPppppppppppPPkbk....",
+      "..kPPpppppppppPPPkbk....",
+      "..kPPPpppppppPPPPkbk....",
+      ".kPPPPPPpppPPPPPPPkbk...",
+      ".kkkkkkkkkkkkkkkkkkkk...",
+      "........................",
+    ],
+  },
+  titan: {
+    head: [7, 14, 5],
+    px: [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........kkkkkk..........",
+      ".......kqqqqqRk.........",
+      ".......kqkkkkRk.........",
+      ".......ki1ii1iIk........",
+      ".......kiiiiiiIk........",
+      "........kiikkIk.........",
+      "....kkkkkaaaaakkkkk.....",
+      "...kaaaAkaaaaaakAaak....",
+      "..kaazaAkazaaaAkAzaak...",
+      "..kiiAkkaaaaaaAAkkAiik..",
+      "..kiik.kaaaaaaAAk.kiik..",
+      "..kiik.kbbbbbbBBk.kiik..",
+      "..kqqk.kbBbbbbBBk.kqqk..",
+      "..kkk..kaAk..kaAk..kkk..",
+      ".......kiIk..kiIk.......",
+      "......kaaAk..kaaAk......",
+      "......kaAAk..kaAAk......",
+      ".....kkkkkk..kkkkkk.....",
+      "........................",
+    ],
+  },
+  yeti: {
+    head: [7, 14, 5],
+    px: [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........kkkkkk..........",
+      ".......klllllLk.........",
+      "......kllccccLLk........",
+      "......klc1cc1cLk........",
+      "......klcccccLLk........",
+      "......kllckkcLLk........",
+      ".....kkllllllLLkk.......",
+      "...kklllllllllLLLkk.....",
+      "..klllkllllllllLklLk....",
+      ".kllLkllllllllllLkLLk...",
+      ".klLLkllllllllllLkLLk...",
+      ".kcLk.kllllllllLLk.kck..",
+      ".kcck.kLlllllllLLk.kcck.",
+      "..kk..kLLLLLLLLLLk..kk..",
+      "......kLLLk..kLLLk......",
+      ".....klllLk..klllLk.....",
+      ".....kcccck..kcccck.....",
+      ".....kkkkkk..kkkkkk.....",
+      "........................",
+    ],
+  },
+};
+const BOSS_TINTS = {
+  royal: { p: "a", P: "A", g: "m", G: "p", b: "e", B: "E" },
+  storm: { l: "C", L: "v" },
+  frost: { t: "C", F: "c", y: "l" },
+  ember: { r: "d", R: "D", q: "N", c: "o" },
+  molten: { r: "D", R: "J", q: "d", Q: "k", c: "a" },
+  bog: { g: "M", G: "F" },
+  gold: { p: "a", P: "A", t: "a", F: "A", y: "z" },
+  sand: { t: "s", F: "S", y: "y" },
+  oil: { a: "Q", A: "K", z: "R" },
+  arena: { g: "i", G: "I", a: "e", A: "E", z: "o" },
+  champion: { a: "z", A: "a", q: "a", z: "x" },
+  wisp: { p: "c", P: "w" },
+  thorn: { p: "F", P: "f" },
+  wood: { r: "n", R: "b", q: "N", Q: "B", c: "h" },
+};
+const BOSS_EYES = { common: "k", rare: "c", epic: "m", legendary: "j" };
+function stampAt(g, x, y, lines) {
+  lines.forEach((row, dy) =>
+    [...row].forEach((ch, dx) => {
+      const yy = y + dy;
+      const xx = x + dx;
+      if (ch !== "." && yy >= 0 && yy < g.length && xx >= 0 && xx < g[0].length) g[yy][xx] = ch;
+    }),
+  );
+}
+/** One boss sprite: body + tint + tier details (glowing eyes, horns for epic, crown for legendary). */
+function bossSprite(look, tint, tier, frame) {
+  const body = BOSS_BODIES[look];
+  const map = { ...(BOSS_TINTS[tint] ?? {}), 1: BOSS_EYES[tier] ?? "k" };
+  const g = body.px.map((r) => [...r].map((c) => map[c] ?? c));
+  const [x0, x1, top] = body.head;
+  if (tier === "epic" || tier === "legendary") {
+    stampAt(g, x0 - 2, top - 3, ["k...", "qk..", "kqk.", ".kqk"]);
+    stampAt(g, x1 - 1, top - 3, ["...k", "..kq", ".kqk", "kqk."]);
+  }
+  if (tier === "legendary") {
+    const cx = Math.floor((x0 + x1) / 2);
+    stampAt(g, cx - 3, top - 3, ["k..k..k", "kakakak", "kazazak", "kkkkkkk"]);
+  }
+  let px = toRows(g);
+  if (frame === 1) px = [...px.slice(1), ".".repeat(px[0].length)]; // rear up a pixel
+  return { w: px[0].length, h: px.length, px, ax: 0.5, ay: 1 };
+}
+export const BOSS_BODY_KEYS = Object.keys(BOSS_BODIES);
+
 // ── Assemble ──────────────────────────────────────────────────────────
 const S = {};
 for (let i = 0; i < 4; i++) S[`oak${i}`] = roundTree(100 + i);
@@ -713,5 +939,9 @@ S.mine = sprite(MINE);
 S.waystone = sprite(WAYSTONE);
 S.waystone_lit = sprite(WAYSTONE_LIT);
 for (const [k, v] of Object.entries(ICONS)) S[`icon_${k}`] = sprite(v, 0, 0);
+for (const [key, b] of Object.entries(BOSSES)) {
+  S[`boss_${key}_0`] = bossSprite(b.look, b.tint, b.tier, 0);
+  S[`boss_${key}_1`] = bossSprite(b.look, b.tint, b.tier, 1);
+}
 
 export const SPRITES = S;

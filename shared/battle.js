@@ -38,14 +38,27 @@ function spawn(team, army, levels, towers, rnd) {
   return out;
 }
 
+/** Boss champions: one huge unit each, standing behind the defender's front line. Spawned last so
+ *  fights without a champion use exactly the same random sequence as before. */
+function spawnChampions(champions, rnd) {
+  const out = [];
+  const n = champions?.length ?? 0;
+  for (let k = 0; k < n; k++) {
+    const c = champions[k];
+    const y = FIELD_H / 2 + (k - (n - 1) / 2) * 18;
+    out.push({ team: 1, type: "boss", look: c.look, x: FIELD_W - 34, y, hp: c.hp, maxHp: c.hp, dmg: c.dmg, range: c.range * TILE_U, speed: c.speed * BASE_SPEED, cooldown: c.cooldown, cd: Math.floor(rnd() * 6), splash: (c.splash ?? 0) * TILE_U, target: -1, retarget: 0 });
+  }
+  return out;
+}
+
 /**
  * Run a battle.
- * attacker / defender: { units: {infantry: n, ...}, levels: {infantry: lvl, ...}, towers? }
+ * attacker / defender: { units: {infantry: n, ...}, levels: {infantry: lvl, ...}, towers?, champions? }
  * With record: true, also returns per-tick frames and events for the replay.
  */
 export function simulate({ attacker, defender, seed, record = false }) {
   const rnd = mulberry32(seed >>> 0);
-  const units = [...spawn(0, attacker.units, attacker.levels, 0, rnd), ...spawn(1, defender.units, defender.levels, defender.towers ?? 0, rnd)];
+  const units = [...spawn(0, attacker.units, attacker.levels, 0, rnd), ...spawn(1, defender.units, defender.levels, defender.towers ?? 0, rnd), ...spawnChampions(defender.champions, rnd)];
   units.forEach((u, i) => (u.id = i));
   const startHp = [0, 0];
   for (const u of units) startHp[u.team] += u.maxHp;
@@ -76,7 +89,7 @@ export function simulate({ attacker, defender, seed, record = false }) {
         bd = d;
         best = v.id;
       }
-      const pref = (u.type === "cavalry" && (v.type === "archer" || v.type === "siege")) || (u.type === "siege" && (v.type === "tank" || v.type === "tower"));
+      const pref = (u.type === "cavalry" && (v.type === "archer" || v.type === "siege")) || (u.type === "siege" && (v.type === "tank" || v.type === "tower" || v.type === "boss"));
       if (pref && d < bdPref && d < 70 * 70) {
         bdPref = d;
         bestPref = v.id;
@@ -177,13 +190,14 @@ export function simulate({ attacker, defender, seed, record = false }) {
     score,
     lost,
   };
-  if (record) return { ...result, frames, events, roster: units.map((u) => ({ team: u.team, type: u.type })) };
+  if (record) return { ...result, frames, events, roster: units.map((u) => (u.look ? { team: u.team, type: u.type, look: u.look } : { team: u.team, type: u.type })) };
   return result;
 }
 
 /** Rough strength of an army, for matchmaking hints. */
-export function armyPower(army, levels = {}, towers = 0) {
+export function armyPower(army, levels = {}, towers = 0, champions = []) {
   let p = towers * (TOWER.hp * 0.02 + TOWER.dmg);
+  for (const c of champions ?? []) p += c.hp * 0.02 + (c.dmg * 10) / c.cooldown;
   for (const [k, n] of Object.entries(army ?? {})) {
     const u = UNITS[k];
     if (!u) continue;

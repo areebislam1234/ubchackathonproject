@@ -34,6 +34,9 @@ export type Player = {
   badges: Record<string, BadgeState>;
   stats: { battles: number; wins: number; bountiesEntered: number; bountiesWon: number; predictions: number; correct: number; discovered: number; crystalsEarned: number };
   history: { bounty: string; rank: number; of: number; score: number; at: number }[];
+  // Boss lairs. Optional so saves from before bosses existed load unchanged.
+  bosses?: { discovered: string[]; cooldowns: Record<string, number>; kills: Record<string, number> };
+  bossClaims?: Record<string, { at: number; response: unknown }>; // challenge requestId → result (idempotency)
 };
 
 export type Entry = {
@@ -99,13 +102,16 @@ export type Bounty = {
   wildcard?: boolean; // Gemini had no market in this realm's category
 };
 
+export type Champion = { look: string; hp: number; dmg: number; range: number; speed: number; cooldown: number; splash: number };
+
 export type BattleRecord = {
   id: string;
   bounty: string;
   at: number;
   seed: number;
   attacker: { id: string; name: string; units: UnitMap; levels: UnitMap };
-  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean };
+  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean; champions?: Champion[] };
+  boss?: string; // lair id, for boss fights (bounty is then "lair:<id>")
   result: { winner: string; ticks: number; destruction: number; survival: number; score: number; lost: UnitMap };
 };
 

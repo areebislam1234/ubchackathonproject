@@ -17,6 +17,7 @@ export function closeMap() {
 
 const STATUS_LABEL = { upcoming: "Upcoming", active: "Active", revealed: "Revealed", resolved: "Settled" };
 const STATUS_COLOR = { upcoming: "#7d7a90", active: "#e23c3c", revealed: "#f6c33b", resolved: "#2d6e2b" };
+const LAIR_COLOR = { common: "#d0d0dc", rare: "#4f8ee0", epic: "#8f52d4", legendary: "#f6c33b" };
 
 export function openMap(g, { travel = false } = {}) {
   G = g;
@@ -138,6 +139,11 @@ function select(sel) {
   sfx("click");
   const b = sel.id ? G.bounties.find((x) => x.id === sel.id) : null;
   const t = sel.town ? G.world.towns.find((x) => x.name === sel.town) : null;
+  const l = sel.lair ? G.lairs.find((x) => x.id === sel.lair) : null;
+  if (l) {
+    state.cx = l.x;
+    state.cy = l.y;
+  }
   if (sel.home && G.me.home) {
     state.cx = G.me.home.x;
     state.cy = G.me.home.y;
@@ -156,7 +162,7 @@ function select(sel) {
 function renderActions() {
   const el = $("map-actions");
   const sel = state.selected;
-  const legend = `<div class="legend">${icon("pin", 1)} found bounty · dashed ring: rumour · ${icon("castle", 1)} waystone · ${icon("flag", 1)} your fortress · faded parchment: unexplored</div>`;
+  const legend = `<div class="legend">${icon("pin", 1)} found bounty · dashed ring: rumour · ${icon("castle", 1)} waystone · ${icon("flag", 1)} your fortress · ${icon("skull", 1)} boss lair · faded parchment: unexplored</div>`;
   if (!sel) return void (el.innerHTML = legend);
   if (sel.home) {
     el.innerHTML = `<button class="btn btn-blue" id="act-home">Recall home</button><button class="btn btn-ghost" id="act-walk">Set course</button>${legend}`;
@@ -170,6 +176,19 @@ function renderActions() {
     el.innerHTML = `<button class="btn btn-blue" id="act-travel" ${att ? "" : "disabled"}>Travel to ${esc(t.name)}</button><button class="btn btn-ghost" id="act-walk">Set course</button>${legend}`;
     $("act-travel").onclick = () => (G.travelTo(t), closeMap());
     $("act-walk").onclick = () => G.setCourse(t.x, t.y + 1) && closeMap();
+    return;
+  }
+  if (sel.lair) {
+    const l = G.lairs.find((x) => x.id === sel.lair);
+    if (!l) return void (el.innerHTML = legend);
+    const ws = G.world.towns.filter((t) => G.me.attuned.includes(t.name)).sort((p, q) => Math.hypot(p.x - l.x, p.y - l.y) - Math.hypot(q.x - l.x, q.y - l.y))[0];
+    el.innerHTML = `
+      <button class="btn btn-gold" id="act-open">${esc(l.name)} · ${esc(l.tierName)}</button>
+      <div class="row"><button class="btn btn-go" id="act-walk" style="flex:1">Set course</button>${ws ? `<button class="btn btn-blue" id="act-ws" style="flex:1">Waystone: ${esc(ws.name)}</button>` : ""}</div>
+      ${legend}`;
+    $("act-open").onclick = () => (closeMap(), G.openLair(l.id));
+    $("act-walk").onclick = () => G.setCourse(l.x, l.y + 1) && (closeMap(), toast(`Marching on ${l.name}`, "good"));
+    if (ws) $("act-ws").onclick = () => (G.travelTo(ws), closeMap());
     return;
   }
   const b = G.bounties.find((x) => x.id === sel.id);
@@ -245,6 +264,12 @@ function clickAt(e) {
     const d = Math.hypot(x - px, y - py);
     if (d < bd) (bd = d), (best = { town: t.name });
   }
+  if (!state.travel)
+    for (const l of G.lairs ?? []) {
+      const [x, y] = toScreen(l.x + 0.5, l.y + 0.5);
+      const d = Math.hypot(x - px, y - py);
+      if (d < bd) (bd = d), (best = { lair: l.id });
+    }
   if (!state.travel)
     for (const b of G.bounties) {
       const p = b.discovered ? { x: b.x, y: b.y } : b.rumor;
@@ -337,6 +362,27 @@ function draw() {
       }
     }
   }
+  // boss lairs: diamonds sized and coloured by tier
+  if (!state.travel)
+    for (const l of G.lairs ?? []) {
+      const [x, y] = toScreen(l.x + 0.5, l.y + 0.5);
+      const r = Math.round(({ common: 6, rare: 7, epic: 9, legendary: 11 }[l.tier] ?? 6) * dp);
+      const diamond = (rr, color) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x, y - rr);
+        ctx.lineTo(x + rr, y);
+        ctx.lineTo(x, y + rr);
+        ctx.lineTo(x - rr, y);
+        ctx.fill();
+      };
+      diamond(r + 3 * dp, "#1b1626");
+      diamond(r, l.readyAt > G.now() ? "#6f6e82" : LAIR_COLOR[l.tier]);
+      const sk = spriteCanvas("icon_skull");
+      const S = Math.round(r * 1.1);
+      ctx.drawImage(sk, Math.round(x - S / 2), Math.round(y - S / 2.4), S, S);
+      if (state.selected?.lair === l.id) ring(ctx, x, y, r + 6 * dp, "#1b1626");
+    }
   // your fortress
   if (G.me.home) {
     const flag = spriteCanvas("icon_flag");

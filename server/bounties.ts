@@ -18,13 +18,16 @@ import {
   rewardsFor,
   sidePriceBps,
 } from "../shared/rules.js";
-import { FOG_CELL, FOG_W, REALMS, SIGHT, T, generateWorld, isDecal, pickBountySite, realmForMarket } from "../shared/world.js";
+import { FOG_CELL, FOG_W, REALMS, SIGHT, T, generateWorld, isDecal, pickBountySite, placeBossLairs, realmForMarket } from "../shared/world.js";
+import { BOSSES } from "../shared/rules.js";
 import { GeminiClient, contractPricesBps, type MarketSummary } from "../gemini/client";
 import { env } from "./config";
 import { db, feed, type BattleRecord, type Bounty, type Entry, type Player } from "./db";
 import { COMBAT_MS, GameError, addGold, award, exploredBytes, newPlayer } from "./players";
 
 export const world = generateWorld();
+/** Fixed boss lairs (same on every server and browser for this world seed). */
+export const lairs = placeBossLairs(world, BOSSES);
 export const gemini = new GeminiClient();
 
 type SealFn = (b: Bounty) => void;
@@ -140,6 +143,7 @@ function questionText(m: MarketSummary) {
 function takenSpots() {
   const spots = visibleBounties().map((b) => ({ x: b.x, y: b.y }));
   for (const p of Object.values(db.data.players)) if (p.home) spots.push(p.home);
+  for (const l of lairs) spots.push({ x: l.x, y: l.y });
   return spots;
 }
 

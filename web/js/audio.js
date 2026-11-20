@@ -67,6 +67,7 @@ const SFX = {
   reveal: () => (noise(0, 0.3, 0.05, 3000), [N.C5, N.G5, N.C6].forEach((f, i) => tone(f, 0.25 + i * 0.09, 0.12, { type: "triangle", vol: 0.1 }))),
   error: () => (tone(160, 0, 0.09, { vol: 0.06 }), tone(120, 0.1, 0.12, { vol: 0.06 })),
   upgrade: () => [N.C4, N.G4, N.C5, N.E5, N.G5].forEach((f, i) => tone(f, i * 0.05, 0.06, { vol: 0.06 })),
+  rumble: () => (noise(0, 0.9, 0.14, 120), tone(55, 0, 0.9, { type: "triangle", vol: 0.18, slide: -15 }), tone(41, 0.3, 0.7, { type: "triangle", vol: 0.14 })),
   waystone: () => [N.C6, N.G5, N.E5, N.C5, N.G4].forEach((f, i) => tone(f, i * 0.05, 0.07, { type: "triangle", vol: 0.1 })),
 };
 export function sfx(name) {

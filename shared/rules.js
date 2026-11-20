@@ -12,11 +12,12 @@ export const UNIT_KEYS = Object.keys(UNITS);
 /** Damage multipliers: attacker → target. */
 export const COUNTERS = {
   infantry: { cavalry: 1.7 },
-  archer: { infantry: 1.5, tank: 0.5 },
+  archer: { infantry: 1.5, tank: 0.5, boss: 0.8 },
   cavalry: { archer: 1.8, siege: 1.8 },
-  siege: { tank: 2.2, tower: 2.5 },
-  tank: {},
+  siege: { tank: 2.2, tower: 2.5, boss: 1.6 },
+  tank: { boss: 1.5 },
   tower: { cavalry: 1.2 },
+  boss: {},
 };
 export const TOWER = { hp: 260, dmg: 13, range: 7, cooldown: 13 };
 export const unitMult = (level) => 1 + 0.12 * (Math.max(1, level) - 1);
@@ -87,6 +88,205 @@ export function guardianArmy(tier) {
     levels: { infantry: g, archer: g, tank: g, cavalry: g, siege: 1 },
     towers: g,
   };
+}
+
+// ── Boss lairs ────────────────────────────────────────────────────────
+// Bosses live at fixed lairs on the world map. Every number that decides how hard they are and
+// what they drop is here, so balance can be tuned without touching the server.
+export const BOSS_TIER_KEYS = ["common", "rare", "epic", "legendary"];
+export const BOSS_TIERS = {
+  common: {
+    name: "Common",
+    color: "#a3a3b3",
+    minKeep: 1, // a hint shown to players, not a gate
+    cooldownMin: 5, // per player, after every attempt
+    look: { scale: 1, aura: null },
+    champion: { hp: 520, dmg: 18 },
+    escort: { units: { infantry: 3, archer: 2, tank: 0, cavalry: 0, siege: 0 }, level: 1, towers: 0 },
+    loot: { gold: [60, 120], materials: [1, 3], manual: 0.15, manuals: [1, 1], scroll: 0, relic: 0 },
+    intel: { chance: 0.1, rarity: { common: 1 } },
+  },
+  rare: {
+    name: "Rare",
+    color: "#4f8ee0",
+    minKeep: 2,
+    cooldownMin: 15,
+    look: { scale: 1.5, aura: "#7ba8f2" },
+    champion: { hp: 1000, dmg: 25 },
+    escort: { units: { infantry: 4, archer: 4, tank: 1, cavalry: 0, siege: 0 }, level: 2, towers: 1 },
+    loot: { gold: [150, 280], materials: [3, 6], manual: 0.35, manuals: [1, 1], scroll: 0.03, relic: 0.04 },
+    intel: { chance: 0.25, rarity: { common: 0.6, rare: 0.4 } },
+  },
+  epic: {
+    name: "Epic",
+    color: "#8f52d4",
+    minKeep: 3,
+    cooldownMin: 30,
+    look: { scale: 2, aura: "#c49bf2" },
+    champion: { hp: 2600, dmg: 42 },
+    escort: { units: { infantry: 6, archer: 5, tank: 2, cavalry: 2, siege: 0 }, level: 3, towers: 1 },
+    loot: { gold: [300, 550], materials: [6, 12], manual: 0.6, manuals: [1, 2], scroll: 0.15, relic: 0.15 },
+    intel: { chance: 0.45, rarity: { common: 0.2, rare: 0.5, epic: 0.3 } },
+  },
+  legendary: {
+    name: "Legendary",
+    color: "#f6c33b",
+    minKeep: 4,
+    cooldownMin: 60,
+    look: { scale: 3, aura: "#e23c3c" },
+    champion: { hp: 4300, dmg: 60 },
+    escort: { units: { infantry: 5, archer: 4, tank: 2, cavalry: 2, siege: 0 }, level: 4, towers: 1 },
+    loot: { gold: [600, 1000], materials: [12, 20], manual: 1, manuals: [1, 2], scroll: 0.4, relic: 0.4 },
+    intel: { chance: 0.7, rarity: { rare: 0.3, epic: 0.45, legendary: 0.25 } },
+  },
+};
+
+/** How each kind of boss fights. Multiplies the tier's champion stats; range and splash are in tiles. */
+export const BOSS_LOOKS = {
+  ogre: { hp: 1, dmg: 1.15, range: 1.6, speed: 0.8, cooldown: 14, splash: 0 },
+  golem: { hp: 1.35, dmg: 0.85, range: 1.6, speed: 0.55, cooldown: 16, splash: 0.8 },
+  wyrm: { hp: 1.1, dmg: 0.9, range: 5, speed: 0.7, cooldown: 18, splash: 1.5 },
+  lich: { hp: 0.8, dmg: 1, range: 6.5, speed: 0.6, cooldown: 15, splash: 1 },
+  titan: { hp: 1.2, dmg: 1.05, range: 1.8, speed: 0.7, cooldown: 15, splash: 1.2 },
+  yeti: { hp: 0.95, dmg: 1, range: 1.5, speed: 1.3, cooldown: 11, splash: 0 },
+};
+
+/** Intel categories. Each boss's realm decides which kind of intelligence it can drop. */
+export const INTEL_CATEGORIES = {
+  sports: { name: "Sports", icon: "trophy" },
+  crypto: { name: "Crypto", icon: "bolt" },
+  economics: { name: "Economics", icon: "coin" },
+  general: { name: "General", icon: "scroll" },
+};
+export const INTEL_RARITIES = ["common", "rare", "epic", "legendary"];
+const REALM_INTEL = {
+  crownlands: { category: "general", topic: "Politics" },
+  frostpeaks: { category: "general", topic: "Weather" },
+  ironvein: { category: "crypto", topic: "Crypto" },
+  goldmarsh: { category: "economics", topic: "Economics" },
+  sunscar: { category: "general", topic: "Commodities" },
+  arena: { category: "sports", topic: "Sports" },
+  whisperwood: { category: "general", topic: "Culture" },
+};
+
+// tint: palette swaps applied to the base look, so bosses sharing a body still look distinct.
+const defBoss = (name, tier, realm, look, lore, tint = null, mods = {}) => ({ name, tier, realm, look, lore, tint, mods, intel: REALM_INTEL[realm] });
+export const BOSSES = {
+  "gravel-king": defBoss("Gravel King Brunt", "common", "crownlands", "ogre", "Claims every road toll in the Crownlands. Nobody remembers voting for him."),
+  "malvek": defBoss("Usurper Malvek", "rare", "crownlands", "ogre", "Took a throne by recount and kept it by club.", "royal"),
+  "hollow-regent": defBoss("The Hollow Regent", "epic", "crownlands", "lich", "A crown with nobody inside it, still issuing decrees.", "royal"),
+  "rimefang": defBoss("Rimefang", "common", "frostpeaks", "yeti", "Hunts whatever the forecast missed."),
+  "matron-hail": defBoss("Matron Hailstorm", "rare", "frostpeaks", "yeti", "Her moods arrive three days before the weather does.", "storm"),
+  "glacier-wyrm": defBoss("The Glacier Wyrm", "epic", "frostpeaks", "wyrm", "Its breath turns whole valleys into January.", "frost"),
+  "slag-golem": defBoss("Slag Golem", "common", "ironvein", "golem", "Built from the scrap of a thousand failed miners."),
+  "gasfee-golem": defBoss("The Gas-Fee Golem", "rare", "ironvein", "golem", "Charges you for every step you take toward it.", "ember"),
+  "hashforge-colossus": defBoss("The Hashforge Colossus", "legendary", "ironvein", "golem", "Woken by the hum of the deepest rigs. Every blow it lands is final.", "molten"),
+  "bog-mudd": defBoss("Bog Ogre Mudd", "common", "goldmarsh", "ogre", "Sits on the marsh's only dry coin pile.", "bog"),
+  "inflation-lich": defBoss("The Inflation Lich", "rare", "goldmarsh", "lich", "Each spell costs a little more than the last.", "gold"),
+  "ledger-wyrm": defBoss("The Ledger Wyrm", "legendary", "goldmarsh", "wyrm", "Coiled around the oldest treasury in the realm. It never forgets a debt.", "gold"),
+  "dune-kesh": defBoss("Dune Titan Kesh", "common", "sunscar", "titan", "Guards a well that has not had water in years."),
+  "crude-baron": defBoss("The Crude Baron", "rare", "sunscar", "titan", "Prices everything in barrels, including your life.", "oil"),
+  "sandstorm-wyrm": defBoss("The Sandstorm Wyrm", "epic", "sunscar", "wyrm", "Swims through the dunes. You only see it when it wants you to.", "sand"),
+  "pit-brawler": defBoss("Pit Brawler Goro", "common", "arena", "ogre", "Lost his first fight. Has not lost one since.", "arena"),
+  "the-undefeated": defBoss("The Undefeated", "rare", "arena", "titan", "Twenty seasons, no losses, one very large trophy room.", "arena"),
+  "grand-champion": defBoss("The Grand Champion", "legendary", "arena", "titan", "Every crowd in the Arena Plains chants one name. It is not yours.", "champion"),
+  "lantern-wisp": defBoss("Lantern Wisp", "common", "whisperwood", "lich", "Leads travellers off the trail and into the charts.", "wisp"),
+  "thornwitch": defBoss("The Thornwitch", "rare", "whisperwood", "lich", "Reviews every hero who passes. The reviews are harsh.", "thorn"),
+  "elder-treant": defBoss("The Elder Treant", "epic", "whisperwood", "golem", "Older than the forest's oldest story, and tired of hearing it.", "wood"),
+};
+export const BOSS_KEYS = Object.keys(BOSSES);
+
+/** The full combat setup for a boss: its escort army, levels, towers and the champion itself. */
+export function bossArmy(key) {
+  const boss = BOSSES[key];
+  const t = BOSS_TIERS[boss.tier];
+  const L = BOSS_LOOKS[boss.look];
+  const m = boss.mods ?? {};
+  const lvl = t.escort.level;
+  return {
+    units: { ...t.escort.units },
+    levels: Object.fromEntries(UNIT_KEYS.map((k) => [k, lvl])),
+    towers: t.escort.towers,
+    champions: [
+      {
+        look: key, // sprite id: boss_<key>_<frame>
+        hp: Math.round(t.champion.hp * L.hp * (m.hp ?? 1)),
+        dmg: Math.round(t.champion.dmg * L.dmg * (m.dmg ?? 1)),
+        range: L.range,
+        speed: L.speed,
+        cooldown: L.cooldown,
+        splash: L.splash,
+      },
+    ],
+  };
+}
+
+// ── Loot ──────────────────────────────────────────────────────────────
+export const MATERIALS = {
+  timber: { name: "Timber", desc: "Seasoned beams for walls and halls." },
+  stone: { name: "Cut Stone", desc: "Dressed blocks for keeps and towers." },
+  iron: { name: "Iron Ingots", desc: "Bands, hinges and arrowheads." },
+};
+export const MATERIAL_KEYS = Object.keys(MATERIALS);
+/** Each material spent takes this much gold off a building upgrade, up to MATERIAL_MAX_SHARE of it. */
+export const MATERIAL_GOLD_VALUE = 20;
+export const MATERIAL_MAX_SHARE = 0.5;
+
+/** Permanent passive bonuses. `minTier` is the weakest boss tier that can drop it. */
+export const RELICS = {
+  "gravel-crown": { name: "Crown of the Gravel King", desc: "+1 Watchtower when rivals attack you.", minTier: "rare", effect: { towers: 1 } },
+  "ledger-scale": { name: "Ledger Scale", desc: "+5% Vault capacity.", minTier: "rare", effect: { vault: 0.05 } },
+  "hashforge-ember": { name: "Hashforge Ember", desc: "+5% Siege damage.", minTier: "rare", effect: { dmg: { siege: 0.05 } } },
+  "rime-horn": { name: "Rimefang's Horn", desc: "+5% Cavalry damage.", minTier: "rare", effect: { dmg: { cavalry: 0.05 } } },
+  "thorn-quiver": { name: "Thornwitch Quiver", desc: "+5% Archer damage.", minTier: "rare", effect: { dmg: { archer: 0.05 } } },
+  "arena-belt": { name: "Champion's Belt", desc: "+5% Infantry damage.", minTier: "epic", effect: { dmg: { infantry: 0.05 } } },
+  "dune-plate": { name: "Dune Titan Plate", desc: "+5% Tank damage.", minTier: "epic", effect: { dmg: { tank: 0.05 } } },
+  "regent-seal": { name: "Seal of the Hollow Regent", desc: "+10% Vault capacity.", minTier: "epic", effect: { vault: 0.1 } },
+  "wyrm-heart": { name: "Wyrm Heart", desc: "+5% damage for every unit.", minTier: "legendary", effect: { dmg: { all: 0.05 } } },
+  "colossus-core": { name: "Colossus Core", desc: "+2 Watchtowers when rivals attack you.", minTier: "legendary", effect: { towers: 2 } },
+};
+export const RELIC_KEYS = Object.keys(RELICS);
+
+const tierIndex = (t) => BOSS_TIER_KEYS.indexOf(t);
+const between = (rnd, [lo, hi]) => lo + Math.floor(rnd() * (hi - lo + 1));
+function weighted(rnd, weights) {
+  const entries = Object.entries(weights).filter(([, w]) => w > 0);
+  const total = entries.reduce((s, [, w]) => s + w, 0);
+  let r = rnd() * total;
+  for (const [k, w] of entries) if ((r -= w) < 0) return k;
+  return entries[entries.length - 1]?.[0];
+}
+
+/**
+ * Roll a boss's loot. Pure: the same rnd sequence always gives the same loot.
+ * `owned` relics are skipped so a relic drop is always something new (gold instead if all are owned).
+ * `forceIntel` (dev tools) guarantees an intel drop of that rarity.
+ */
+export function rollLoot(tier, rnd, { owned = {}, forceIntel = null } = {}) {
+  const t = BOSS_TIERS[tier];
+  const L = t.loot;
+  const loot = { gold: between(rnd, L.gold), materials: {}, manuals: {}, scrolls: 0, relic: null, intel: null };
+  const nMat = between(rnd, L.materials);
+  for (let i = 0; i < nMat; i++) {
+    const k = MATERIAL_KEYS[Math.floor(rnd() * MATERIAL_KEYS.length)];
+    loot.materials[k] = (loot.materials[k] ?? 0) + 1;
+  }
+  if (rnd() < L.manual) {
+    const n = between(rnd, L.manuals);
+    for (let i = 0; i < n; i++) {
+      const u = UNIT_KEYS[Math.floor(rnd() * UNIT_KEYS.length)];
+      loot.manuals[u] = (loot.manuals[u] ?? 0) + 1;
+    }
+  }
+  if (rnd() < L.scroll) loot.scrolls = 1;
+  if (rnd() < L.relic) {
+    const pool = RELIC_KEYS.filter((k) => tierIndex(RELICS[k].minTier) <= tierIndex(tier) && !owned[k]);
+    if (pool.length) loot.relic = pool[Math.floor(rnd() * pool.length)];
+    else loot.gold += 200;
+  }
+  if (forceIntel) loot.intel = { rarity: forceIntel };
+  else if (rnd() < t.intel.chance) loot.intel = { rarity: weighted(rnd, t.intel.rarity) };
+  return loot;
 }
 
 // ── Predictions ───────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { db, type Player } from "./db";
 import { GameError, bySession, disband, logout, markExplored, onBadge, playerView, register, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, tick, world } from "./bounties";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
+import { discoverLairs, lairView, lairsFor } from "./bosses";
 import { badgeMints, chainStatus, claimAll, holdingsFor, linkWallet, loadAuthority, mintBadge, sealResults, unlinkWallet, verifyWalletSignature, walletChallenge } from "./chain/solana";
 import { applyEvents, extractEvents } from "./chain/stream";
 import { encodePng } from "./png";
@@ -110,8 +111,9 @@ app.post(
     const pos = req.body?.pos;
     if (pos && Number.isInteger(pos.x) && Number.isInteger(pos.y)) p.pos = { x: pos.x, y: pos.y };
     const found = discover(p, p.pos);
+    const lairsFound = discoverLairs(p, p.pos);
     db.save();
-    return { discovered: found };
+    return { discovered: found, lairs: lairsFound };
   }),
 );
 app.post(
@@ -134,6 +136,18 @@ app.get("/api/bounties/:id/opponents", auth, wrap((req) => ({ opponents: opponen
 app.post("/api/bounties/:id/attack", auth, wrap((req) => attack(req.player, String(req.params.id), String(req.body?.opponent ?? "guardian"), req.body?.units ?? {})));
 app.post("/api/bounties/:id/predict", auth, wrap((req) => predict(req.player, String(req.params.id), req.body?.side, req.body?.confBps, req.body?.stake)));
 app.get("/api/battles/:id", auth, wrap((req) => battle(String(req.params.id))));
+
+// ── Boss lairs ────────────────────────────────────────────────────────
+app.get("/api/bosses", auth, wrap((req) => ({ lairs: lairsFor(req.player), now: Date.now() })));
+app.get(
+  "/api/bosses/:id",
+  auth,
+  wrap((req) => {
+    const id = String(req.params.id);
+    if (!req.player.bosses?.discovered.includes(id)) throw new GameError("You haven't found that lair yet.", 404);
+    return lairView(req.player, id);
+  }),
+);
 
 // ── Fortress and army ─────────────────────────────────────────────────
 app.post("/api/fortress/upgrade", auth, wrap((req) => upgradeBuilding(req.player, String(req.body?.building))));

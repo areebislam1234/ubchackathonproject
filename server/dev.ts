@@ -4,6 +4,7 @@ import { FOG_H, FOG_W } from "../shared/world.js";
 import { db, type Player } from "./db";
 import { GameError, award } from "./players";
 import { discover, world } from "./bounties";
+import { discoverLairs } from "./bosses";
 
 const clamp = (v: unknown, lo: number, hi: number) => {
   const n = Math.floor(Number(v));
@@ -30,6 +31,7 @@ export function revealAll(p: Player) {
   p.explored = Buffer.alloc(FOG_W * FOG_H, 1).toString("base64");
   p.attuned = world.towns.map((t) => t.name);
   discover(p, p.pos);
+  discoverLairs(p, p.pos);
   db.save();
 }
 
@@ -52,5 +54,7 @@ export function resetProgress(p: Player) {
   p.army = { ...START.army };
   p.unitLevels = { ...START.unitLevels };
   p.lastCombatAt = 0;
+  delete p.bosses;
+  delete p.bossClaims;
   db.save();
 }

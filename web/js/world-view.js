@@ -1,4 +1,4 @@
-// The overworld: camera, hero movement, y-sorted objects, bounty camps and interaction.
+// The overworld: camera, hero movement, y-sorted objects, bounty camps, boss lairs and interaction.
 import { astar, FOG_CELL, FOG_H, FOG_W, isDecal, SIGHT, TILE, REALMS } from "/shared/world.js";
 import { rand2 } from "/shared/rng.js";
 import { objectSprite, spriteCanvas, Terrain } from "./terrain.js";
@@ -13,6 +13,14 @@ const CAMP_LOOK = {
   epic: [["tent_red", -18, 3], ["tower_gold", 0, 0], ["tent_gold", 18, 3]],
 };
 const STATUS_ICON = { upcoming: "hourglass", active: "swords", revealed: "scroll", resolved: "check" };
+// How big each boss tier stands on the map, and what its lair looks like.
+const LAIR_LOOK = {
+  common: { scale: 1, aura: null, props: "stones" },
+  rare: { scale: 1.5, aura: "123,168,242", props: "bones" },
+  epic: { scale: 2, aura: "196,155,242", props: "palisade" },
+  legendary: { scale: 3, aura: "226,60,60", props: "arena" },
+};
+const LAIR_COLOR = { common: "#a3a3b3", rare: "#4f8ee0", epic: "#8f52d4", legendary: "#f6c33b" };
 
 export class WorldView {
   constructor(canvas, world, hooks = {}) {
@@ -28,6 +36,9 @@ export class WorldView {
     this.path = null;
     this.camps = [];
     this.campTiles = new Map();
+    this.lairs = [];
+    this.lairTiles = new Map();
+    this.shakeUntil = 0;
     this.attuned = new Set();
     this.explored = new Uint8Array(FOG_W * FOG_H);
     this.near = null;
@@ -62,6 +73,19 @@ export class WorldView {
     this.campTiles = new Map(camps.map((c) => [c.y * this.world.W + c.x, c]));
     this.campsByRow = new Map();
     for (const c of camps) this.addRow(this.campsByRow, c.y, { kind: "camp", c });
+  }
+
+  /** Boss lairs the player has found: [{ id, tier, x, y, readyAt, name }]. */
+  setLairs(lairs) {
+    this.lairs = lairs;
+    this.lairTiles = new Map(lairs.map((l) => [l.y * this.world.W + l.x, l]));
+    this.lairsByRow = new Map();
+    for (const l of lairs) this.addRow(this.lairsByRow, l.y, { kind: "lair", l });
+  }
+
+  /** Shake the camera for a moment (a legendary boss is near). */
+  shake(ms = 700) {
+    this.shakeUntil = performance.now() + ms;
   }
 
   /** Your own fortress on the world map. */
@@ -111,7 +135,7 @@ export class WorldView {
     const w = this.world;
     if (tx < 0 || ty < 0 || tx >= w.W || ty >= w.H) return false;
     const i = ty * w.W + tx;
-    return w.walk[i] === 1 && !this.campTiles.has(i) && i !== this.homeTile;
+    return w.walk[i] === 1 && !this.campTiles.has(i) && !this.lairTiles.has(i) && i !== this.homeTile;
   }
 
   footFree(x, y) {
@@ -139,7 +163,7 @@ export class WorldView {
           }
         }
     if (goal < 0) return false;
-    const path = astar(w.W, w.H, start, goal, (i) => (w.walk[i] === 1 && !this.campTiles.has(i) && i !== this.homeTile ? 1 : Infinity), {
+    const path = astar(w.W, w.H, start, goal, (i) => (w.walk[i] === 1 && !this.campTiles.has(i) && !this.lairTiles.has(i) && i !== this.homeTile ? 1 : Infinity), {
       diagonal: true,
       maxNodes: far ? w.W * w.H : 40000,
     });
@@ -238,6 +262,15 @@ export class WorldView {
         best = { kind: "camp", camp: c };
       }
     }
+    for (const l of this.lairs) {
+      // big bosses can be reached from further away
+      const reach = (LAIR_LOOK[l.tier]?.scale ?? 1) - 1;
+      const d = Math.hypot(l.x * TILE + 8 - h.x, l.y * TILE + 12 - h.y) - reach * TILE;
+      if (d < bd) {
+        bd = d;
+        best = { kind: "lair", lair: l };
+      }
+    }
     if (this.home) {
       const d = Math.hypot(this.home.x * TILE + 8 - h.x, this.home.y * TILE + 12 - h.y);
       if (d < bd) {
@@ -252,7 +285,7 @@ export class WorldView {
         best = { kind: "waystone", town: t };
       }
     }
-    const key = best ? (best.camp?.id ?? best.town?.name ?? best.kind) : null;
+    const key = best ? (best.camp?.id ?? best.lair?.id ?? best.town?.name ?? best.kind) : null;
     if (key !== this.nearKey) {
       this.nearKey = key;
       this.near = best;
@@ -335,6 +368,15 @@ export class WorldView {
         return;
       }
     }
+    for (const l of this.lairs) {
+      const sc = LAIR_LOOK[l.tier]?.scale ?? 1;
+      if (Math.abs(tx - l.x) <= Math.ceil(sc) && ty <= l.y && ty >= l.y - Math.ceil(1.6 * sc)) {
+        if (this.near?.lair?.id === l.id) return this.interact();
+        this.setCourse(l.x, l.y + 1);
+        this.pendingLair = l.id;
+        return;
+      }
+    }
     if (this.home && Math.abs(tx - this.home.x) <= 1 && ty <= this.home.y && ty >= this.home.y - 2) {
       if (this.near?.kind === "home") return this.interact();
       this.setCourse(this.home.x, this.home.y + 1);
@@ -348,6 +390,7 @@ export class WorldView {
       }
     }
     this.pendingCamp = null;
+    this.pendingLair = null;
     this.setCourse(tx, ty);
   }
 
@@ -359,8 +402,12 @@ export class WorldView {
     const H = canvas.height;
     const camX = Math.round(this.cam.x);
     const camY = Math.round(this.cam.y);
-    const ox = Math.round(W / 2 - camX * s);
-    const oy = Math.round(H / 2 - camY * s);
+    let ox = Math.round(W / 2 - camX * s);
+    let oy = Math.round(H / 2 - camY * s);
+    if (performance.now() < this.shakeUntil) {
+      ox += Math.round((Math.random() - 0.5) * 4 * s);
+      oy += Math.round((Math.random() - 0.5) * 3 * s);
+    }
     ctx.imageSmoothingEnabled = false;
     // animated ocean
     const frame = ((Math.floor(this.time * 3) % 4) + 4) % 4;
@@ -375,6 +422,12 @@ export class WorldView {
       for (let cx = Math.max(0, Math.floor(view.x0 / CS)); cx <= Math.min(this.world.W / 32 - 1, Math.floor(view.x1 / CS)); cx++) {
         ctx.drawImage(this.terrain.chunk(cx, cy), ox + cx * CS * s, oy + cy * CS * s, CS * s, CS * s);
       }
+    // lair grounds (scorched earth, auras, props) sit under everything that stands up
+    for (const l of this.lairs) {
+      const lx = l.x * TILE;
+      const ly = l.y * TILE;
+      if (lx > view.x0 - 160 && lx < view.x1 + 160 && ly > view.y0 - 160 && ly < view.y1 + 200) this.drawLairGround(l, ox, oy, s);
+    }
     // y-sorted objects, structures, camps and the hero
     const tx0 = Math.max(0, Math.floor(view.x0 / TILE) - 4);
     const tx1 = Math.min(this.world.W - 1, Math.ceil(view.x1 / TILE) + 4);
@@ -398,11 +451,13 @@ export class WorldView {
       }
       for (const item of this.structuresByRow.get(ty) ?? []) this.drawStructure(item.s, ox, oy, s);
       for (const item of this.campsByRow?.get(ty) ?? []) this.drawCamp(item.c, ox, oy, s);
+      for (const item of this.lairsByRow?.get(ty) ?? []) this.drawLair(item.l, ox, oy, s);
       if (this.homeByRow?.has(ty)) this.drawHome(ox, oy, s);
       if (ty === heroRow) this.drawHero(ox, oy, s);
     }
     // floating camp banners on top of everything
     for (const c of this.camps) this.drawBanner(c, ox, oy, s);
+    for (const l of this.lairs) this.drawLairMarker(l, ox, oy, s);
     // course marker
     if (this.path?.length) {
       const last = this.path[this.path.length - 1];
@@ -515,6 +570,132 @@ export class WorldView {
     ctx.fillStyle = "#1b1626";
     ctx.fillRect(ox + (x - 1) * s, oy + (y + 11) * s, 2 * s, 3 * s);
     const ic = spriteCanvas(`icon_${STATUS_ICON[c.status] ?? "flag"}`);
+    ctx.drawImage(ic, ox + (x - 4) * s, oy + (y + 1) * s, 8 * s, 8 * s);
+  }
+
+  drawLairGround(l, ox, oy, s) {
+    const ctx = this.ctx;
+    const look = LAIR_LOOK[l.tier] ?? LAIR_LOOK.common;
+    const cx = l.x * TILE + 8;
+    const cy = l.y * TILE + 12;
+    const px = (x, y, w, h, c) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(ox + Math.round(x) * s, oy + Math.round(y) * s, Math.max(1, Math.round(w)) * s, Math.max(1, Math.round(h)) * s);
+    };
+    if (l.tier === "legendary") {
+      // scorched, cracked ground in a wide ring
+      for (let dy = -4; dy <= 3; dy++)
+        for (let dx = -5; dx <= 5; dx++) {
+          const d = Math.hypot(dx, dy * 1.3);
+          if (d > 5.2) continue;
+          px(cx - 8 + dx * TILE, cy - 12 + dy * TILE, TILE, TILE, `rgba(27,22,38,${(0.42 - d * 0.06).toFixed(2)})`);
+          if (rand2(l.x + dx, l.y + dy, 91) > 0.62) px(cx - 4 + dx * TILE + rand2(dx, dy, 3) * 6, cy - 6 + dy * TILE, 6, 1, "rgba(226,60,60,0.55)");
+        }
+    }
+    if (look.aura) {
+      const pulse = 0.28 + Math.sin(this.time * (l.tier === "rare" ? 1.5 : 3)) * 0.12;
+      const r = 12 * look.scale;
+      for (let a = 0; a < 40; a++) {
+        const ang = (a / 40) * Math.PI * 2;
+        px(cx + Math.cos(ang) * r - 1, cy + Math.sin(ang) * r * 0.45 - 1, 2, 2, `rgba(${look.aura},${pulse.toFixed(2)})`);
+      }
+    }
+    const ring = (n, r, draw) => {
+      for (let i = 0; i < n; i++) {
+        const ang = (i / n) * Math.PI * 2 + 0.3;
+        draw(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r * 0.5, i);
+      }
+    };
+    if (look.props === "stones")
+      ring(8, 14, (x, y) => {
+        px(x - 2, y - 2, 4, 3, "#1b1626");
+        px(x - 1, y - 2, 3, 2, "#a3a3b3");
+      });
+    if (look.props === "bones") {
+      ring(6, 18, (x, y, i) => {
+        if (i % 2) px(x - 3, y - 1, 6, 2, "#eef4fb");
+        else px(x - 1, y - 3, 2, 5, "#eef4fb");
+      });
+      this.drawFlame(cx + 20, cy - 4, ox, oy, s, 1);
+    }
+    if (look.props === "palisade") {
+      ring(18, 28, (x, y) => {
+        px(x - 1, y - 8, 3, 9, "#1b1626");
+        px(x, y - 8, 1, 8, "#8a5a2c");
+        px(x, y - 9, 1, 1, "#d0d0dc");
+      });
+      this.drawFlame(cx - 26, cy - 6, ox, oy, s, 1.5);
+      this.drawFlame(cx + 26, cy - 6, ox, oy, s, 1.5);
+    }
+    if (look.props === "arena") {
+      ring(14, 46, (x, y, i) => {
+        // broken pillars, skull totems and rubble
+        if (i % 3 === 0) {
+          px(x - 3, y - 14, 7, 15, "#1b1626");
+          px(x - 2, y - 13, 5, 13, "#6f6e82");
+          px(x - 2, y - 13, 2, 13, "#a3a3b3");
+          this.drawFlame(x, y - 15, ox, oy, s, 1.4);
+        } else if (i % 3 === 1) {
+          px(x - 1, y - 9, 2, 10, "#5c3a1d");
+          const sk = spriteCanvas("icon_skull");
+          ctx.drawImage(sk, ox + Math.round(x - 4) * s, oy + Math.round(y - 15) * s, 8 * s, 8 * s);
+        } else px(x - 4, y - 3, 8, 3, "#6f6e82");
+      });
+    }
+  }
+
+  drawFlame(x, y, ox, oy, s, size = 1) {
+    const ctx = this.ctx;
+    const f = Math.floor(this.time * 8 + x) % 3;
+    const h = Math.round((5 + f) * size);
+    ctx.fillStyle = "#1b1626";
+    ctx.fillRect(ox + Math.round(x - 2) * s, oy + Math.round(y) * s, 4 * s, 3 * s);
+    ctx.fillStyle = "#e23c3c";
+    ctx.fillRect(ox + Math.round(x - 1.5 * size) * s, oy + Math.round(y - h) * s, Math.max(1, Math.round(3 * size)) * s, h * s);
+    ctx.fillStyle = "#f6c33b";
+    ctx.fillRect(ox + Math.round(x - 0.5 * size) * s, oy + Math.round(y - h * 0.6) * s, Math.max(1, Math.round(size)) * s, Math.round(h * 0.6) * s);
+  }
+
+  drawLair(l, ox, oy, s) {
+    const ctx = this.ctx;
+    const look = LAIR_LOOK[l.tier] ?? LAIR_LOOK.common;
+    const sc = look.scale;
+    // epic and legendary bosses breathe; the rest stand still
+    const breathe = l.tier === "epic" || l.tier === "legendary" ? Math.floor(this.time * 1.6 + l.x) % 2 : 0;
+    const spr = spriteCanvas(`boss_${l.id}_${breathe}`);
+    const bx = l.x * TILE + 8;
+    const by = l.y * TILE + 15;
+    const w = Math.round(spr.width * sc);
+    const h = Math.round(spr.height * sc);
+    ctx.drawImage(this.shadow, ox + Math.round(bx - 9 * sc) * s, oy + Math.round(by - 3 * sc) * s, Math.round(18 * sc) * s, Math.round(5 * sc) * s);
+    const resting = l.readyAt && l.readyAt > Date.now();
+    if (resting) ctx.globalAlpha = 0.55;
+    ctx.drawImage(spr, ox + Math.round(bx - w / 2) * s, oy + Math.round(by - h + 1) * s, w * s, h * s);
+    ctx.globalAlpha = 1;
+    if (l.tier === "legendary") {
+      // embers rising around the boss
+      for (let i = 0; i < 14; i++) {
+        const t = (this.time * 0.5 + rand2(i, l.x, 7)) % 1;
+        const x = bx + (rand2(i, l.y, 8) - 0.5) * 70;
+        const y = by - t * 80;
+        ctx.fillStyle = `rgba(${t < 0.5 ? "246,195,59" : "226,60,60"},${(1 - t).toFixed(2)})`;
+        ctx.fillRect(ox + Math.round(x) * s, oy + Math.round(y) * s, s * 2, s * 2);
+      }
+    }
+  }
+
+  drawLairMarker(l, ox, oy, s) {
+    const ctx = this.ctx;
+    const sc = (LAIR_LOOK[l.tier] ?? LAIR_LOOK.common).scale;
+    const bob = Math.round(Math.sin(this.time * 2.4 + l.x) * 1.5);
+    const x = l.x * TILE + 8;
+    const y = l.y * TILE + 15 - Math.round(24 * sc) - 13 + bob;
+    const resting = l.readyAt && l.readyAt > Date.now();
+    ctx.fillStyle = "#1b1626";
+    ctx.fillRect(ox + (x - 6) * s, oy + (y - 1) * s, 12 * s, 11 * s);
+    ctx.fillStyle = resting ? "#6f6e82" : LAIR_COLOR[l.tier];
+    ctx.fillRect(ox + (x - 5) * s, oy + y * s, 10 * s, 9 * s);
+    const ic = spriteCanvas(`icon_${resting ? "hourglass" : "skull"}`);
     ctx.drawImage(ic, ox + (x - 4) * s, oy + (y + 1) * s, 8 * s, 8 * s);
   }
 

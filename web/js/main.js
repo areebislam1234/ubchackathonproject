@@ -13,12 +13,14 @@ import { openArmy } from "./screens/army.js";
 import { openProfile } from "./screens/profile.js";
 import { battleOpen } from "./screens/battle.js";
 import { openDev } from "./screens/dev.js";
+import { openLair, refreshLairSheet } from "./screens/lair.js";
 
 // Shared game context handed to every screen.
 export const G = {
   cfg: null,
   me: null,
   bounties: [],
+  lairs: [],
   world: null,
   view: null,
   thumb: null,
@@ -26,7 +28,9 @@ export const G = {
   clockSkew: 0,
   refreshMe,
   refreshBounties,
+  refreshLairs,
   openBounty: (id) => openBounty(G, id),
+  openLair: (id) => openLair(G, id),
   travelTo,
   setCourse,
 };
@@ -46,6 +50,11 @@ G.view = new WorldView($("world"), G.world, {
       const id = G.view.pendingCamp;
       G.view.pendingCamp = null;
       openBounty(G, id);
+    }
+    if (G.view.pendingLair) {
+      const id = G.view.pendingLair;
+      G.view.pendingLair = null;
+      openLair(G, id);
     }
   },
 });
@@ -140,8 +149,10 @@ function startGame() {
   v.paused = false;
   renderHud();
   refreshBounties();
+  refreshLairs();
   setInterval(refreshBounties, 2500);
   setInterval(refreshMe, 4000);
+  setInterval(refreshLairs, 10000);
   setInterval(pollFeed, 3000);
   setInterval(flushExplore, 1500);
   setInterval(drawMinimap, 200);
@@ -167,6 +178,17 @@ async function refreshBounties() {
     G.bounties = r.bounties;
     G.view.setCamps(G.bounties.filter((b) => b.discovered && b.status !== "resolved").map((b) => ({ id: b.id, x: b.x, y: b.y, tier: b.tier, status: b.status, entered: b.entered, featured: b.featured })));
     if (currentSheet() === "bounty") refreshBountySheet(G);
+  } catch {
+    /* offline for a moment */
+  }
+}
+
+async function refreshLairs() {
+  try {
+    const r = await api("/api/bosses");
+    G.lairs = r.lairs;
+    G.view.setLairs(G.lairs.map((l) => ({ id: l.id, tier: l.tier, x: l.x, y: l.y, readyAt: l.readyAt, name: l.name })));
+    if (currentSheet() === "lair") refreshLairSheet(G);
   } catch {
     /* offline for a moment */
   }
@@ -215,6 +237,18 @@ async function flushExplore() {
   pending.clear();
   try {
     const r = await api("/api/explore", { body: { cells, pos: lastPos } });
+    if (r.lairs?.length) {
+      await refreshLairs();
+      for (const id of r.lairs) {
+        const l = G.lairs.find((x) => x.id === id);
+        if (!l) continue;
+        if (l.tier === "legendary") {
+          sfx("rumble");
+          G.view.shake(900);
+        } else sfx("discover");
+        toast(`Boss sighted: ${l.name} · ${l.tierName}`, l.tier === "legendary" || l.tier === "epic" ? "bad" : "gold");
+      }
+    }
     if (r.discovered?.length) {
       sfx("discover");
       await refreshBounties();
@@ -244,6 +278,10 @@ function tickPrompt() {
     const b = G.bounties.find((x) => x.id === t.camp.id) ?? t.camp;
     const when = b.status === "upcoming" ? `opens in ${timeLeft(b.startsAt - G.now())}` : b.status === "active" ? `${timeLeft(b.endsAt - G.now())} left` : b.status === "revealed" ? "question revealed" : "settled";
     el.innerHTML = `<kbd>E</kbd><span class="p-main">${esc(b.id)}</span><span>${b.tier[0].toUpperCase() + b.tier.slice(1)}${b.featured ? " · Featured" : ""} · ${when} · ${b.participants ?? 0}/${b.maxPlayers ?? "?"} warlords</span>`;
+  } else if (t.kind === "lair") {
+    const l = G.lairs.find((x) => x.id === t.lair.id) ?? t.lair;
+    const wait = (l.readyAt ?? 0) - G.now();
+    el.innerHTML = `<kbd>E</kbd><span class="p-main">${esc(l.name)}</span><span>${esc(l.tierName ?? l.tier)} boss · ${wait > 0 ? `back in ${timeLeft(wait)}` : "ready to fight"}</span>`;
   } else if (t.kind === "home") {
     el.innerHTML = `<kbd>E</kbd><span class="p-main">Your fortress</span><span>Keep level ${G.me.buildings.keep} · upgrade buildings and train troops</span>`;
   } else {
@@ -256,6 +294,7 @@ $("prompt").addEventListener("click", () => G.view.interact());
 
 async function onInteract(t) {
   if (t.kind === "camp") return openBounty(G, t.camp.id);
+  if (t.kind === "lair") return openLair(G, t.lair.id);
   if (t.kind === "home") return openFortress(G);
   if (t.kind === "waystone") {
     if (!G.me.attuned.includes(t.town.name)) {
@@ -364,6 +403,27 @@ function drawMinimap() {
       mm.stroke();
       mm.setLineDash([]);
     }
+  }
+  const LAIR_COLORS = { common: "#d0d0dc", rare: "#4f8ee0", epic: "#8f52d4", legendary: "#f6c33b" };
+  for (const l of G.lairs) {
+    const x = Math.round((l.x - hx + R) * s);
+    const y = Math.round((l.y - hy + R) * s);
+    if (x < -6 || y < -6 || x > 174 || y > 174) continue;
+    const r = l.tier === "legendary" ? 5 : l.tier === "epic" ? 4 : 3;
+    mm.fillStyle = "#1b1626";
+    mm.beginPath();
+    mm.moveTo(x, y - r - 2);
+    mm.lineTo(x + r + 2, y);
+    mm.lineTo(x, y + r + 2);
+    mm.lineTo(x - r - 2, y);
+    mm.fill();
+    mm.fillStyle = l.readyAt > G.now() ? "#6f6e82" : LAIR_COLORS[l.tier];
+    mm.beginPath();
+    mm.moveTo(x, y - r);
+    mm.lineTo(x + r, y);
+    mm.lineTo(x, y + r);
+    mm.lineTo(x - r, y);
+    mm.fill();
   }
   if (G.me?.home) {
     const x = Math.round((G.me.home.x - hx + R) * s);

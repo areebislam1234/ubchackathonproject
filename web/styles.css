@@ -1238,3 +1238,45 @@ code {
 .board td.num .stepper {
   display: inline-flex;
 }
+
+/* boss lairs */
+.lair-head {
+  display: grid;
+  grid-template-columns: minmax(110px, 200px) 1fr;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.lair-portrait {
+  display: grid;
+  place-items: end center;
+  min-height: 120px;
+  padding: 8px;
+  background: radial-gradient(circle at 50% 80%, rgba(42, 34, 64, 0.35), transparent 70%), var(--parch-d);
+  border: var(--px) solid var(--parch-dd);
+  image-rendering: pixelated;
+}
+.lair-head.tier-rare .lair-portrait {
+  border-color: var(--blue-l);
+}
+.lair-head.tier-epic .lair-portrait {
+  border-color: var(--crystal);
+  box-shadow: 0 0 0 var(--px) var(--crystal-l);
+}
+.lair-head.tier-legendary .lair-portrait {
+  border-color: var(--gold-d);
+  background: radial-gradient(circle at 50% 85%, rgba(226, 60, 60, 0.45), transparent 70%), #2a2240;
+  box-shadow: 0 0 0 var(--px) var(--gold), 0 0 18px rgba(226, 60, 60, 0.5);
+}
+.tier-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border: var(--px) solid var(--outline);
+  color: var(--outline);
+  font: 400 18px var(--display);
+}
+@media (max-width: 520px) {
+  .lair-head {
+    grid-template-columns: 1fr;
+  }
+}
