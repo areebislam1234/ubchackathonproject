@@ -99,9 +99,13 @@ function noteFailure(key: string) {
   failures.set(key, f);
 }
 
+/** Sessions end after this long without a request. */
+export const SESSION_IDLE_MS = 12 * 3600_000;
+
 function startSession(p: Player) {
   const token = crypto.randomBytes(24).toString("base64url");
   db.data.sessions[token] = p.id;
+  (db.data.sessionSeen ??= {})[token] = Date.now();
   db.save();
   return token;
 }
@@ -145,6 +149,7 @@ export async function signIn(name: string, password: string) {
 export function logout(token: string | undefined) {
   if (token && db.data.sessions[token]) {
     delete db.data.sessions[token];
+    delete db.data.sessionSeen?.[token];
     db.save();
   }
 }
@@ -152,7 +157,26 @@ export function logout(token: string | undefined) {
 export function bySession(token: string | undefined): Player | null {
   if (!token) return null;
   const id = db.data.sessions[token];
-  return id ? (db.data.players[id] ?? null) : null;
+  if (!id) return null;
+  const seen = (db.data.sessionSeen ??= {});
+  const now = Date.now();
+  // sessions from before idle expiry existed start their clock now
+  if (seen[token] && now - seen[token] > SESSION_IDLE_MS) {
+    delete db.data.sessions[token];
+    delete seen[token];
+    db.save();
+    return null;
+  }
+  if (!seen[token] || now - seen[token] > 60_000) {
+    seen[token] = now;
+    db.save();
+  }
+  return db.data.players[id] ?? null;
+}
+
+/** Put a warlord at their fortress gate (every sign-in starts there). */
+export function sendHome(p: Player) {
+  if (p.home) p.pos = { x: p.home.x, y: p.home.y + 2 };
 }
 
 // ── Inventory and relics ──────────────────────────────────────────────

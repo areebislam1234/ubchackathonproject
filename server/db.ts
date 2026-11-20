@@ -136,6 +136,7 @@ export type ChainEvent = { signature: string; slot: number; blockTime: number | 
 export type DBShape = {
   players: Record<string, Player>;
   sessions: Record<string, string>;
+  sessionSeen?: Record<string, number>; // token → last use, for idle expiry
   usernames: Record<string, string>; // lower-case name → player id
   emails?: Record<string, string>; // legacy
   bounties: Record<string, Bounty>;

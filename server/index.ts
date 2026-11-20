@@ -7,7 +7,7 @@ import { PALETTE, SPRITES } from "../shared/sprites.js";
 import { verifyStreamSignature } from "../shared/hmac";
 import { IS_LOCAL, NETWORK, ROOT, env, explorerAddress, explorerTx, geminiBaseUrl } from "./config";
 import { db, type Player } from "./db";
-import { GameError, bySession, disband, logout, markExplored, onBadge, playerView, register, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
+import { GameError, bySession, disband, logout, markExplored, onBadge, playerView, register, sendHome, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, tick, world } from "./bounties";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
 import { challenge, devNextIntel, discoverLairs, lairView, lairsFor } from "./bosses";
@@ -82,6 +82,8 @@ app.post(
   wrap(async (req) => {
     const r = await signIn(req.body?.name, req.body?.password);
     assignHome(r.player);
+    sendHome(r.player);
+    db.save();
     return { token: r.token, player: playerView(r.player), passwordSet: !!r.passwordSet };
   }),
 );

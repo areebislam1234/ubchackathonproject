@@ -73,6 +73,31 @@ export class WorldView {
     this.campTiles = new Map(camps.map((c) => [c.y * this.world.W + c.x, c]));
     this.campsByRow = new Map();
     for (const c of camps) this.addRow(this.campsByRow, c.y, { kind: "camp", c });
+    this.unstick();
+  }
+
+  /**
+   * If the hero stands where something solid now is (a camp or lair that loaded after they were
+   * placed), step them to the nearest open tile. Otherwise every direction is blocked and they freeze.
+   */
+  unstick() {
+    const h = this.hero;
+    if (this.footFree(h.x, h.y)) return;
+    const tx = Math.floor(h.x / TILE);
+    const ty = Math.floor((h.y - 2) / TILE);
+    for (let r = 1; r < 12; r++)
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = (tx + dx) * TILE + 8;
+          const y = (ty + dy) * TILE + 14;
+          if (this.footFree(x, y) && this.world.reachable[(ty + dy) * this.world.W + tx + dx]) {
+            h.x = x;
+            h.y = y;
+            this.path = null;
+            return;
+          }
+        }
   }
 
   /** Boss lairs the player has found: [{ id, tier, x, y, readyAt, name }]. */
@@ -81,6 +106,7 @@ export class WorldView {
     this.lairTiles = new Map(lairs.map((l) => [l.y * this.world.W + l.x, l]));
     this.lairsByRow = new Map();
     for (const l of lairs) this.addRow(this.lairsByRow, l.y, { kind: "lair", l });
+    this.unstick();
   }
 
   /** Shake the camera for a moment (a legendary boss is near). */

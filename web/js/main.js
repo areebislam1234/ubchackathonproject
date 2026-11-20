@@ -1,6 +1,6 @@
 // StakeClash client: boots the world, signs you in, runs the HUD and wires every screen.
 import { FOG_CELL, FOG_W, REALMS, TILE, generateWorld } from "/shared/world.js";
-import { api, session } from "./api.js";
+import { api, saveToken, session } from "./api.js";
 import { sfx, sound } from "./audio.js";
 import { icon, spriteUrl } from "./gfx.js";
 import { worldThumbnail } from "./terrain.js";
@@ -78,14 +78,6 @@ let attract = true;
 
 session.onLogout = () => location.reload();
 G.cfg = await api("/api/config").catch(() => ({}));
-if (session.token) {
-  try {
-    G.me = await api("/api/me");
-    startGame();
-  } catch {
-    /* show title */
-  }
-}
 
 // ── Sign in / create account ──────────────────────────────────────────
 let authMode = "signin";
@@ -117,7 +109,7 @@ $("login-form").addEventListener("submit", async (e) => {
   try {
     const r = await api(authMode === "create" ? "/api/register" : "/api/login", { body: { name, password } });
     session.token = r.token;
-    localStorage.setItem("stakeclash.token", r.token);
+    saveToken(r.token);
     G.me = await api("/api/me");
     sfx("enter");
     if (r.passwordSet) toast("Password saved. Use it to sign in from now on.", "good");
@@ -132,7 +124,7 @@ $("login-form").addEventListener("submit", async (e) => {
 
 export async function logOut() {
   await api("/api/logout", { body: {} }).catch(() => {});
-  localStorage.removeItem("stakeclash.token");
+  saveToken(null);
   session.token = null;
   location.reload();
 }
@@ -144,7 +136,8 @@ function startGame() {
   $("hud").hidden = false;
   $("btn-dev").hidden = !G.cfg.devTools;
   const v = G.view;
-  const pos = G.me.pos ?? G.world.spawn;
+  // every visit starts at your fortress gate (the server puts you there on sign-in)
+  const pos = G.me.home ? { x: G.me.home.x, y: G.me.home.y + 2 } : (G.me.pos ?? G.world.spawn);
   v.setExplored(Uint8Array.from(atob(G.me.explored), (c) => c.charCodeAt(0)));
   v.setAttuned(G.me.attuned);
   v.setHome(G.me.home, G.me.buildings.keep);
@@ -537,3 +530,11 @@ for (const id of ["sheet", "mapview", "battle"]) obs.observe($(id), { attributes
 
 void spriteUrl;
 window.__stakeclash = G; // handy for debugging and the end-to-end test
+
+// Restore this tab's session last: startGame needs everything above to exist. (Restoring it
+// earlier ran startGame before the exploration state was set up, which threw, was swallowed,
+// and left the game paused: the hero couldn't move after reopening the site.)
+if (session.token) {
+  G.me = await api("/api/me").catch(() => null);
+  if (G.me) startGame();
+}
