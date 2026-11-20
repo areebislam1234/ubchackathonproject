@@ -25,6 +25,34 @@ Built for UBC 2026 from our design doc. Its three technologies each have a disti
 | ![World map](docs/map.png) | ![Bounty](docs/bounty.png) |
 | ![Battle](docs/battle.png) | ![The revealed question](docs/prediction.png) |
 
+## The yield economy (Treasury, T)
+
+Troops grow strongest through **Mastery**, paid for with **Might**. Might comes only from real investment results. Everything runs on **devnet test USDC: no real money**.
+
+1. **Deposit.** In the Treasury, create a deposit link and open it in Phantom. It's a Solana Pay request to send devnet USDC (free at faucet.circle.com) to the game's USDC account. The QuickNode Stream sees the transfer and the game credits it once. The link's reference key or your verified linked wallet matches the deposit to you.
+2. **Invest.** Buy BTC, ETH, SOL, XRP, DOGE or HYPE at the live Gemini ask; sell at the bid. Positions are recorded at real prices with test money; there is no made-up APY.
+3. **Realize.** Selling above your average cost is realized yield; selling below is a realized loss. The Overview keeps principal, cash, market value, unrealized and realized gains apart.
+4. **Convert.** Only realized yield converts, at **1 USDC = 100 Might** (configurable in `shared/rules.js` `ECONOMY`). Principal never converts, and losses reduce what's eligible.
+5. **Upgrade.** Mastery adds +3% HP and damage per rank to a unit type, up to rank 20 (+60%). Rank r costs 25 × 1.18^(r−1) Might, about 37 USDC of realized yield to max one unit type. Bosses give the smaller Drills track (+15% max).
+6. **Withdraw.** Cash goes back to your verified linked wallet as a USDC transfer. A failed transfer is refunded.
+
+Money only changes on the server, in integer micro-USDC, and every money action carries a request id, so a retried request never doubles it.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `USDC_MINT` | devnet: Circle's devnet USDC; local: a test mint `npm run setup-solana` creates | The token deposits and withdrawals use |
+| `EXECUTOR` | `paper` | How trades fill. `paper` records fills at live Gemini prices |
+| `STREAM_NETWORK_EVERY`, `INTEL_WATCH_MINTS` | 50, devnet USDC | Network sampling for crypto intel |
+
+**Withdrawals on devnet** draw on the game's own USDC, so send the authority some test USDC (`npm run setup-solana` prints its USDC account and balance).
+
+### Moving to real money later
+The code is built so the switch is mostly configuration:
+- point `NETWORK`, `SOLANA_RPC_URL` and `USDC_MINT` at mainnet (USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`)
+- implement the `SwapExecutor` in `server/funds.ts` so trades become real DEX swaps
+
+The hard part isn't code. Holding players' money (custody), real-money PvP stakes and investment yield can fall under money-transmission, securities and gambling rules. A mainnet launch needs legal review and a security audit first. A non-custodial design, where funds stay in players' wallets, reduces that burden.
+
 ## Bosses, loot and intelligence
 
 Away from the bounties, **21 bosses** guard fixed lairs across the seven realms. Find one by exploring (a "Boss sighted" toast; legendary bosses shake the ground), walk up to it and press **E**.
@@ -94,16 +122,16 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
 
 - **Move:** WASD / arrows, or click to walk (it finds the way around obstacles). Hold **Shift** to sprint. **E** interacts, scroll zooms, drag looks around.
 - **Terrain:** only what you can see blocks you (trees, rocks, mountain peaks, water). Mountain ranges are walkable rock with peaks scattered on them, and winding passes through every range. Dense forests have trails. A walk anywhere is on average only about 15% longer than a straight line.
-- **Shortcuts:** **H** home, **M** map, **F** fortress, **R** army, **B** bag, **I** intel, **P** profile. Walk up to your fortress and press **E** to manage it.
+- **Shortcuts:** **H** home, **M** map, **F** fortress, **R** army, **T** treasury, **B** bag, **I** intel, **P** profile. Walk up to your fortress and press **E** to manage it.
 - **Dev tools** (the **Dev** button in the dock, or the `` ` `` key) cover everything a demo needs:
   - **Warlord:** set gold, Crystals and trophies, step any building or unit level, add troops, grant badges, or **Max everything** in one click. **Reset** puts you back to a new warlord.
   - **World:** reveal the whole map and attune every waystone, teleport to any town, your fortress or exact coordinates, and clear the combat cooldown.
-  - **Bosses:** teleport to any lair, reset boss cooldowns, add drill points and reset the daily limit, fill the Bag, grant relics, and choose the rarity of the next intel drop.
+  - **Bosses:** add test USDC or Might, teleport to any lair, reset boss cooldowns, add drill points and reset the daily limit, fill the Bag, grant relics, and choose the rarity of the next intel drop.
   - **Bounties:** spawn one in any realm (choose tier and featured) and jump to it. See every live bounty with its hidden question, and start, end or settle any of them (settling needs mock Gemini).
   - Inside a bounty sheet the same start, end and settle buttons appear.
   - The panel is on by default. Set `DEV_TOOLS=off` in `.env` before sharing the game publicly.
 - **Progress** is saved in `.data/local`. `npm run dev -- --fresh` starts over.
-- **Tests:** `npm test` runs 99 end-to-end checks on a separate stack, so it never touches your game.
+- **Tests:** `npm test` runs 104 end-to-end checks on a separate stack, so it never touches your game.
 
 ## 3-minute demo
 
@@ -214,7 +242,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | Command | Does |
 |---|---|
 | `npm run dev` | Runs everything for the current `NETWORK` (`-- --fresh` wipes local progress) |
-| `npm test` | 99 end-to-end checks on an isolated stack |
+| `npm test` | 104 end-to-end checks on an isolated stack |
 | `npm run setup-solana` | Creates the authority and funds it if possible, then creates the badge mints |
 | `npm run print-filter` | Writes the QuickNode filter with your addresses filled in |
 | `npm run world-preview` | Renders the generated world to `docs/world-map.png` |
@@ -226,6 +254,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 |---|---|
 | `shared/` | World generator, pixel-art sprites, battle simulator and game rules. These are the same files in the browser and on the server. |
 | `server/` | API, bounty director, players and economy, boss lairs and loot (`bosses.ts`), JSON database, Solana (`chain/solana.ts`), Stream handling (`chain/stream.ts`) |
+| `server/funds.ts`, `server/chain/usdc.ts` | The yield economy: ledger, trades, conversion, Mastery, USDC deposits and withdrawals |
 | `server/intel/` | Intelligence reports: market selection, scenario parsing, the data providers and report assembly |
 | `localchain/` | The local Solana RPC (LiteSVM) and the stream relay |
 | `gemini/` | Gemini client and a mock server with the same endpoints |

@@ -345,6 +345,22 @@ try {
   const vigArgs = { attacker: { units: { infantry: 6 }, levels: { infantry: 1 }, vigor: { infantry: 0.15 }, boosts: { infantry: 0.15 } }, defender: { units: { archer: 4 }, levels: { archer: 1 } }, seed: 7 };
   ok(JSON.stringify(simulate(vigArgs)) === JSON.stringify(simulate(vigArgs)), "fights with drill bonuses are deterministic, so replays match");
 
+  console.log("\nThe yield economy");
+  const dref = (await call(ct, "POST", "/api/funds/deposit", { usdc: 20 })).body;
+  ok(dref.url?.startsWith("solana:") && dref.url.includes(`spl-token=${dref.mint}`) && dref.url.includes(`reference=${dref.reference}`), "deposits use a Solana Pay link with the game's test USDC mint and a reference");
+  const depBody = JSON.stringify({ events: [{ signature: "e2e-deposit-1", slot: 1, blockTime: 1, memos: [], badges: [], deposits: [{ from: "SomeoneElse111", amount: 20_000_000, keys: [dref.reference] }] }] });
+  const postDep = () => fetch(`${gameUrl}/webhooks/quicknode`, { method: "POST", headers: { "content-type": "application/json", ...signStreamPayload(process.env.QUICKNODE_WEBHOOK_SECRET!, depBody) }, body: depBody }).then((r) => r.json() as any);
+  const da = await postDep();
+  const db2 = await postDep();
+  const fd = (await call(ct, "GET", "/api/funds")).body;
+  ok(da.applied === 1 && db2.applied === 0 && fd.cash === 20_000_000 && fd.principal === 20_000_000, "a deposit the Stream reports is credited once, as principal");
+  ok((await call(ct, "POST", "/api/funds/convert", { usdc: 1, requestId: "e2e-convert-1" })).status === 400, "principal never converts into Might (only realized yield does)");
+  await call(ct, "POST", "/api/dev/usdc", { might: 100 });
+  const ms = (await call(ct, "POST", "/api/army/mastery", { unit: "archer" })).body;
+  ok(ms.mastery.ranks.archer === 1 && ms.might === 75, "Might buys Mastery ranks (rank 1 = 25 Might)");
+  const wd = await call(ct, "POST", "/api/funds/withdraw", { usdc: 500, requestId: "e2e-withdraw-1" });
+  ok(wd.status === 400, "withdrawals over your cash, or without a verified wallet, are refused");
+
   console.log("\nIntelligence");
   const sc = parseScenario({ ticker: "NBAMVP27", title: "2027 NBA MVP", category: "Sports", contracts: [{ label: "Shai Gilgeous-Alexander wins MVP", instrumentSymbol: "A" }, { label: "Nikola Jokić wins MVP", instrumentSymbol: "B" }] }, { label: "Shai Gilgeous-Alexander wins MVP", instrumentSymbol: "A" });
   ok(sc.type === "award-race" && sc.subject.name === "Shai Gilgeous-Alexander" && sc.rivals[0] === "Nikola Jokić" && sc.league === "NBA", "an MVP market is about that player, with the other contracts as rivals");

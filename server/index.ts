@@ -181,7 +181,14 @@ app.get(
 );
 
 // ── Treasury: deposits, investing, yield → Might ──────────────────────
-app.get("/api/funds", auth, wrap(async (req) => ({ ...fundsView(req.player, await quotes()), testMoney: true, network: NETWORK })));
+app.get(
+  "/api/funds",
+  auth,
+  wrap(async (req) => {
+    const qs = await quotes();
+    return { ...fundsView(req.player, qs), quotes: qs, testMoney: true, network: NETWORK };
+  }),
+);
 app.get("/api/funds/quotes", auth, wrap(async () => ({ quotes: await quotes() })));
 app.post("/api/funds/buy", auth, wrap((req) => buy(req.player, req.body?.coin, req.body?.usdc, req.body?.requestId)));
 app.post("/api/funds/sell", auth, wrap((req) => sell(req.player, req.body?.coin, req.body?.qty, req.body?.requestId)));

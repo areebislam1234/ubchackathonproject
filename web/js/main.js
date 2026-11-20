@@ -16,6 +16,7 @@ import { openDev } from "./screens/dev.js";
 import { openLair, refreshLairSheet } from "./screens/lair.js";
 import { openInventory, unseenCount } from "./screens/inventory.js";
 import { openIntel } from "./screens/intel.js";
+import { openTreasury } from "./screens/treasury.js";
 
 // Shared game context handed to every screen.
 export const G = {
@@ -199,6 +200,8 @@ function renderHud() {
   $("gold-val").textContent = fmt(m.gold);
   $("gold-fill").style.width = `${Math.min(100, (m.gold / m.derived.vaultCap) * 100)}%`;
   $("crystal-val").textContent = fmt(m.crystals);
+  $("usdc-val").textContent = `$${((m.usdc ?? 0) / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  $("might-val").textContent = fmt(m.might ?? 0);
   G.view.setAttuned(m.attuned);
   G.view.setHome(m.home, m.buildings.keep);
   renderBagBadge();
@@ -487,6 +490,9 @@ $("btn-fortress").addEventListener("click", () => openFortress(G));
 $("btn-army").addEventListener("click", () => openArmy(G));
 $("btn-bag").addEventListener("click", () => openInventory(G));
 $("btn-intel").addEventListener("click", () => openIntel(G));
+$("btn-bank").addEventListener("click", () => openTreasury(G));
+$("res-usdc").addEventListener("click", () => openTreasury(G, "overview"));
+$("res-might").addEventListener("click", () => openTreasury(G, "overview"));
 $("btn-profile").addEventListener("click", () => openProfile(G));
 $("btn-dev").addEventListener("click", () => openDev(G));
 $("hud-chief").addEventListener("click", () => openProfile(G));
@@ -516,6 +522,7 @@ addEventListener("keydown", (e) => {
   if (k === "r") openArmy(G);
   if (k === "b") openInventory(G);
   if (k === "i") openIntel(G);
+  if (k === "t") openTreasury(G);
   if (k === "p") openProfile(G);
 });
 
