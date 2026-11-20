@@ -110,31 +110,35 @@ function main(stream) {
       var badgeChanges = Object.keys(changes).map(function (k) {
         return changes[k];
       });
-      // USDC deposits: the authority's USDC goes up; the sender is the owner whose USDC went down
+      // Token deposits: any token the game's vault (the authority) receives. The sender is the owner
+      // whose balance of that token went down. USDC sent through a Solana Pay link is matched to a
+      // player by its reference key; tokens sent through the vault's own deposit flow carry a memo.
       var deposits = [];
-      if (DEPOSIT_MINT) {
-        var usdc = {};
-        var pairs = [["pre", meta.preTokenBalances || []], ["post", meta.postTokenBalances || []]];
-        for (var u = 0; u < pairs.length; u++)
-          for (var v = 0; v < pairs[u][1].length; v++) {
-            var tb = pairs[u][1][v];
-            if (tb.mint !== DEPOSIT_MINT || !tb.owner) continue;
-            if (!usdc[tb.owner]) usdc[tb.owner] = { pre: 0, post: 0 };
-            usdc[tb.owner][pairs[u][0]] += Number(tb.uiTokenAmount && tb.uiTokenAmount.amount) || 0;
-          }
-        var into = usdc[AUTHORITY] ? usdc[AUTHORITY].post - usdc[AUTHORITY].pre : 0;
-        if (into > 0) {
-          var from = null;
-          var drop = 0;
-          for (var o in usdc)
-            if (o !== AUTHORITY && usdc[o].pre - usdc[o].post > drop) {
-              drop = usdc[o].pre - usdc[o].post;
-              from = o;
-            }
-          // the transaction's accounts, so a Solana Pay reference key can match the deposit to a player
-          deposits.push({ from: from, amount: into, keys: keys.slice(0, 16) });
+      var byMint = {};
+      var pairs = [["pre", meta.preTokenBalances || []], ["post", meta.postTokenBalances || []]];
+      for (var u = 0; u < pairs.length; u++)
+        for (var v = 0; v < pairs[u][1].length; v++) {
+          var tb = pairs[u][1][v];
+          if (!tb.owner || !tb.mint) continue;
+          if (!byMint[tb.mint]) byMint[tb.mint] = {};
+          if (!byMint[tb.mint][tb.owner]) byMint[tb.mint][tb.owner] = { pre: 0, post: 0 };
+          byMint[tb.mint][tb.owner][pairs[u][0]] += Number(tb.uiTokenAmount && tb.uiTokenAmount.amount) || 0;
         }
+      for (var mint in byMint) {
+        var owners = byMint[mint];
+        var into = owners[AUTHORITY] ? owners[AUTHORITY].post - owners[AUTHORITY].pre : 0;
+        if (into <= 0) continue;
+        var from = null;
+        var drop = 0;
+        for (var o in owners)
+          if (o !== AUTHORITY && owners[o].pre - owners[o].post > drop) {
+            drop = owners[o].pre - owners[o].post;
+            from = o;
+          }
+        // the transaction's accounts, so a Solana Pay reference key can match the deposit to a player
+        deposits.push({ mint: mint, from: from, amount: into, keys: keys.slice(0, 16) });
       }
+      void DEPOSIT_MINT;
       if (!involved && !callsProgram && !badgeChanges.length && !deposits.length) continue;
       // Memo text shows up as `Memo (len N): "text"`, as its own log line, or (jsonParsed) as a
       // parsed spl-memo instruction, depending on the memo program version and encoding.

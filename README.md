@@ -134,22 +134,25 @@ Everything that moves value or decides a result belongs to the Fortune Front Sol
 - **Public stats** never include formations, orders or loadouts.
 - **Dossiers are relic-only:** you need a **Spyglass of the Watch**, an Information Relic that rare (20%), epic (35%) and legendary (50%) bosses drop.
 
-## The SOL vault (T)
+## The Vault: bring any crypto, trade it, earn Might (T)
 
-Bring your own crypto into the game. **Vault → Deposit** builds a transfer from your linked wallet to the game's vault (with a memo naming the deposit); Phantom, MetaMask or any Wallet Standard wallet asks you to approve it, or the in-game wallet signs it right there. The game checks the transaction on-chain before it counts, once per signature.
+The Vault is your crypto portfolio inside the game. Everything runs on **devnet test money: no real funds**.
 
-Your SOL stays SOL: nothing is sold or swapped. Every 10 seconds the vault is valued at **Gemini's live SOL/USD price**, and whenever its value reaches a **new high**, the growth above the old high becomes **Might** automatically (100 Might per $1). A dip and recovery never pays twice, deposits never count as growth, and withdrawals shrink the high-water mark in proportion. **Withdraw** sends SOL back to your verified wallet. Dev → Arena & odds has demo price buttons (SOL ±5%) for showing growth live.
+1. **Deposit (Vault → Deposit), real and on-chain.** SOL, **USDC**, or **any Solana token** in your linked wallet (SPL or Token-2022).
+   - The game builds a transfer to its vault account with a memo naming the deposit. Phantom, MetaMask or any Wallet Standard wallet asks you to approve it, or the in-game wallet signs it right there.
+   - The game checks the confirmed transaction before it counts, once per signature, and credits exactly what the vault received. The QuickNode Stream marks it as seen.
+   - USDC can also arrive through a Solana Pay link (free devnet USDC: faucet.circle.com).
+   - A token with no market price is held as **unpriced**: it can be withdrawn but not traded.
+2. **Trade (Vault → Trade).** Swap any priced holding into **any coin Gemini prices in USD** (over 70: BTC, ETH, SOL, XRP, DOGE, AAVE, AVAX, BONK, LINK and more). Sells fill at the live **bid** and buys at the **ask**, so quick round trips cost the spread. Trades run on the game's ledger, backed by what you deposited; real on-chain swaps can replace the ledger on mainnet.
+3. **Earn Might for trading well.**
+   - **Selling at a profit** pays **100 Might per $1** of realized profit, but only above your best realized result so far. A loss has to be won back before trading pays again, so churning can't farm Might.
+   - **Holding** pays **25 Might per $1** whenever a coin you hold passes its own high-water mark. A dip and recovery never pays twice, and deposits and buys never count as growth.
+   - Spend Might on class abilities (R) and Colosseum stakes (K).
+4. **Withdraw.** SOL, USDC and tokens you deposited go back to your verified wallet. Coins bought on the ledger (marked "ledger") are sold for SOL or USDC first.
 
-## The yield economy (Treasury, T)
+The old USDC Treasury and SOL-only vault move into the Vault automatically on first load: SOL, cash and coins keep their cost basis and high-water marks, and Might already earned is kept.
 
-Realized investment yield becomes **Might**, which unlocks class abilities. Might comes only from real investment results. Everything runs on **devnet test USDC: no real money**.
-
-1. **Deposit.** In the Treasury, create a deposit link and open it in Phantom. It's a Solana Pay request to send devnet USDC (free at faucet.circle.com) to the game's USDC account. The QuickNode Stream sees the transfer and the game credits it once. The link's reference key or your verified linked wallet matches the deposit to you.
-2. **Invest.** Buy BTC, ETH, SOL, XRP, DOGE or HYPE at the live Gemini ask; sell at the bid. Positions are recorded at real prices with test money; there is no made-up APY.
-3. **Realize.** Selling above your average cost is realized yield; selling below is a realized loss. The Overview keeps principal, cash, market value, unrealized and realized gains apart.
-4. **Convert.** Only realized yield converts, at **1 USDC = 100 Might** (configurable in `shared/rules.js` `ECONOMY`). Principal never converts, and losses reduce what's eligible.
-5. **Unlock.** Spend Might on class abilities in the Army screen (600 or 900 Might each). Gold still pays for troops and levels; bosses give the small Drills track (+15% max).
-6. **Withdraw.** Cash goes back to your verified linked wallet as a USDC transfer. A failed transfer is refunded.
+**Dev → Arena & odds** has the demo tools: set a demo price for any coin (±5%), add test USDC to your vault, and get a test token sent to your wallet to show any-token deposits. Rates and the list of known token mints are in `shared/rules.js` (`PORTFOLIO`).
 
 Money only changes on the server, in integer micro-USDC, and every money action carries a request id, so a retried request never doubles it.
 

@@ -75,6 +75,22 @@ function mightTab(m) {
     <h3>Verify</h3>${sources(m.sources)}`;
 }
 
+function portfolioTab(pf) {
+  return `<div class="facts" style="grid-template-columns:repeat(3,1fr)">
+      ${tile(fmt(pf.deposits), `Deposits (${pf.players} vaults)`)}
+      ${tile(fmt(pf.trades), "Trades")}
+      ${tile(usd(pf.volume), "Traded volume")}
+      ${tile(usd(pf.realizedProfit), "Realized profit")}
+      ${tile(fmt(pf.mightTrading), "Might from trading")}
+      ${tile(fmt(pf.mightHodl), "Might from holding")}
+    </div>
+    ${flowChart(pf.history, { label: "Trading volume, per hour", money: true })}
+    ${pf.depositsByAsset.length ? `<h3>Deposited</h3><table class="table"><tbody>${pf.depositsByAsset.map((a) => `<tr><td>${esc(a.asset)}</td><td class="num">${fmt(a.count)} deposit${a.count === 1 ? "" : "s"}</td><td class="num">${usd(a.usd)}</td></tr>`).join("")}</tbody></table>` : ""}
+    ${pf.mostTraded.length ? `<h3>Most traded</h3><p class="chips">${pf.mostTraded.map((c) => `<span class="chip" aria-pressed="false">${esc(c.coin)} ×${c.n}</span>`).join("")}</p>` : ""}
+    <p class="note">Deposits are real devnet transfers into the game's vault, confirmed on-chain and seen by the QuickNode Stream. Trades fill at Gemini's live prices on the game ledger. <span class="testmoney">Test money: no real funds</span></p>
+    <h3>Verify</h3>${sources(pf.sources)}`;
+}
+
 function usdcTab(u) {
   return `<div class="facts" style="grid-template-columns:repeat(3,1fr)">
       ${tile(usd(u.deposited), `Deposited (${u.deposits})`)}
@@ -101,13 +117,13 @@ export async function openEconomy(G, which) {
   const banner = live
     ? `<div class="coach">${icon("chart", 2)} <b>On-chain.</b> Read from the Fortune Front program through QuickNode (Streams, RPC backfill, WebSocket). ${fmt(d.finalized)} of ${fmt(d.events)} events finalized.</div>`
     : `<div class="coach warn">${icon("chart", 2)} <b>Not on-chain yet.</b> ${/not deployed/.test(d.chain.reason) ? "The Fortune Front program isn't deployed yet" : `The Fortune Front program can't be used right now (${esc(d.chain.reason)})`}, so these numbers come from the game's own records of the same events. They switch to on-chain data, with explorer links, once the program is live.</div>`;
-  const tabs = [["gold", "Gold"], ["might", "Might"], ["usdc", "USDC"]].map(([k, n]) => `<button class="chip" data-etab="${k}" aria-pressed="${tab === k}">${n}</button>`).join("");
+  const tabs = [["gold", "Gold"], ["might", "Might"], ["portfolio", "Portfolio"]].map(([k, n]) => `<button class="chip" data-etab="${k}" aria-pressed="${tab === k}">${n}</button>`).join("");
   body.innerHTML = `
     <h2>Economic Board</h2>
     <p class="sub">Where the realm's money is: how much exists, where it came from, where it went.</p>
     ${banner}
     <div class="chips">${tabs}</div>
-    ${tab === "gold" ? goldTab(d.gold) : tab === "might" ? mightTab(d.might) : usdcTab(d.usdc)}
+    ${tab === "gold" ? goldTab(d.gold) : tab === "might" ? mightTab(d.might) : d.portfolio ? portfolioTab(d.portfolio) : usdcTab(d.usdc)}
     <p class="note">Program ${esc(d.chain.program)} · ${d.chain.queued} action${d.chain.queued === 1 ? "" : "s"} waiting to send${d.chain.failed ? ` · ${d.chain.failed} failed` : ""}${d.index.backfilledAt ? ` · last backfill ${ago(d.index.backfilledAt)}` : ""}</p>`;
   for (const b of body.querySelectorAll("[data-etab]")) b.addEventListener("click", () => (sfx("click"), openEconomy(G, b.dataset.etab)));
   bindProfileLinks(G, body);

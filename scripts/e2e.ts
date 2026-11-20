@@ -396,8 +396,8 @@ try {
   const da = await postDep();
   const db2 = await postDep();
   const fd = (await call(ct, "GET", "/api/funds")).body;
-  ok(da.applied === 1 && db2.applied === 0 && fd.cash === 20_000_000 && fd.principal === 20_000_000, "a deposit the Stream reports is credited once, as principal");
-  ok((await call(ct, "POST", "/api/funds/convert", { usdc: 1, requestId: "e2e-convert-1" })).status === 400, "principal never converts into Might (only realized yield does)");
+  const vd = (await call(ct, "GET", "/api/vault")).body;
+  ok(da.applied === 1 && db2.applied === 0 && fd.principal === 20_000_000 && vd.holdings.find((h: any) => h.asset === "USDC")?.qty === 20, "a USDC deposit the Stream reports is credited once, into the vault");
   await call(ct, "POST", "/api/dev/usdc", { might: 1300 });
   const might0 = (await call(ct, "GET", "/api/me")).body.might;
   const ab1 = (await call(ct, "POST", "/api/army/ability", { id: "volley" })).body;
@@ -559,21 +559,24 @@ try {
     ok((await call(eve.token, "POST", "/api/vault/deposit/submit", { nonce: prep.nonce, tx: signTx(prep.tx) })).status === 400, "the same deposit can't be credited twice");
     await call(eve.token, "POST", "/api/dev/sol-price", { usd: 110 });
     let v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
-    ok(v.mightEarned === 1500 && v.might === 1500, "SOL rises from $100 to $110: $15 of growth becomes 1,500 Might automatically");
+    ok(v.mightEarned === 375 && v.might === 375, "SOL rises from $100 to $110: $15 of holding growth becomes 375 Might automatically (25 per $1)");
     await call(eve.token, "POST", "/api/dev/sol-price", { usd: 104 });
     v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
     await call(eve.token, "POST", "/api/dev/sol-price", { usd: 110 });
     v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
-    ok(v.mightEarned === 1500, "a dip and recovery pays nothing twice (high-water mark)");
+    ok(v.mightEarned === 375, "a dip and recovery pays nothing twice (high-water mark)");
     await call(eve.token, "POST", "/api/dev/sol-price", { usd: 112 });
     v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
-    ok(v.mightEarned === 1800 && Math.abs(v.highWaterPrice - 112) < 0.01, "a new high pays only the growth above the old one (+300 Might at $112)");
+    ok(v.mightEarned === 450 && Math.abs(v.highWaterPrice - 112) < 0.01, "a new high pays only the growth above the old one (+75 Might at $112)");
+    // trading: sell some SOL for USDC at a profit
+    const tr = await call(eve.token, "POST", "/api/vault/trade", { from: "SOL", to: "USDC", amount: 0.5, requestId: crypto.randomUUID().replace(/-/g, "") });
+    ok(tr.status === 200 && tr.body.trade.realized === 6e6 && tr.body.trade.might === 600, "selling 0.5 SOL bought at $100 for $112 realizes $6 and pays 600 Might (100 per $1)");
     const before = await lamportsOf(addr);
     const w = await call(eve.token, "POST", "/api/vault/withdraw", { sol: 0.5, requestId: crypto.randomUUID().replace(/-/g, "") });
-    ok(w.status === 200 && w.body.lamports === 1e9 && Math.abs(w.body.hwmUsd - 112e6) < 2 && (await lamportsOf(addr)) - before === 0.5e9, "withdrawing 0.5 SOL sends it back to the wallet and shrinks the high-water mark in proportion");
+    ok(w.status === 200 && w.body.lamports === 0.5e9 && Math.abs(w.body.hwmUsd - 56e6) < 2 && (await lamportsOf(addr)) - before === 0.5e9, "withdrawing 0.5 SOL sends it back to the wallet and shrinks the high-water mark in proportion");
     ok((await call(eve.token, "POST", "/api/vault/withdraw", { sol: 5, requestId: crypto.randomUUID().replace(/-/g, "") })).status === 400, "you can't withdraw more than your vault holds");
     const me = (await call(eve.token, "GET", "/api/me")).body;
-    ok(me.vault.lamports === 1e9 && me.might === 1800, "the HUD sees the vault and the Might");
+    ok(me.vault.lamports === 0.5e9 && me.might === 1050 && me.vault.totalUsd > 0, "the HUD sees the vault, its total value and the Might");
     await call(eve.token, "POST", "/api/dev/sol-price", { live: true });
   }
 

@@ -391,6 +391,30 @@ export const ECONOMY = {
   feeBps: 0, // trade fee in basis points
   minWithdrawUsdc: 1,
 };
+/**
+ * The Vault portfolio: deposit SOL, USDC or any Solana token, trade every coin Gemini prices in USD,
+ * and earn Might for trading well. Realized profit pays the full rate; simply holding while prices
+ * reach new highs pays a smaller one, so active, profitable trading pays most.
+ */
+export const PORTFOLIO = {
+  realizedMightPerUsd: 100, // Might per $1 of realized trading profit (above your best result so far)
+  hodlMightPerUsd: 25, // Might per $1 a holding gains above its high-water mark
+  minTradeUsd: 1,
+  ledgerDecimals: 8, // precision for coins held only on the game ledger (bought with other assets)
+  // Known token mints → the Gemini symbol that prices them. Devnet has only test USDC with value;
+  // the mainnet mints are ready for when the game moves to real money.
+  mints: {
+    "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": "USDC", // Circle USDC (devnet)
+    EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: "USDC", // Circle USDC (mainnet)
+    Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: "USDT",
+    DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263: "BONK",
+    JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN: "JUP",
+    "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs": "ETH", // Wormhole-wrapped ETH
+    EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm: "WIF",
+  },
+  stable: ["USDC", "USDT"], // priced at $1, never count as growth
+};
+
 export const DRILLS = {
   perPoint: 0.005, // +0.5% HP and damage per point on one unit type
   maxPerUnit: 30, // up to +15% per unit type

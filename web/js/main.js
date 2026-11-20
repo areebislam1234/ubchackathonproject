@@ -218,8 +218,9 @@ function renderHud() {
   $("gold-val").textContent = fmt(m.gold);
   $("gold-fill").style.width = `${Math.min(100, (m.gold / m.derived.vaultCap) * 100)}%`;
   $("crystal-val").textContent = fmt(m.crystals);
-  $("usdc-val").textContent = `◎${((m.vault?.lamports ?? 0) / 1e9).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-  $("res-usdc").title = m.vault?.valueUsd != null ? `SOL in your vault: worth $${(m.vault.valueUsd / 1e6).toFixed(2)}. Growth turns into Might.` : "SOL in your vault";
+  const total = m.vault?.totalUsd ?? m.vault?.valueUsd ?? 0;
+  $("usdc-val").textContent = `$${(total / 1e6).toLocaleString("en-US", { maximumFractionDigits: total >= 1e9 ? 0 : 2 })}`;
+  $("res-usdc").title = `Your vault: worth $${(total / 1e6).toFixed(2)}. Trade for profit to earn Might.`;
   $("might-val").textContent = fmt(m.might ?? 0);
   G.view.setAttuned(m.attuned);
   G.view.setHome(m.home, m.buildings.keep);

@@ -6,6 +6,7 @@ import { badgeMints, MEMO_PREFIX } from "./solana";
 import { confirmWithdrawal, creditDeposit } from "../funds";
 import { applyDuelMemo } from "../colosseum";
 import { ingestTransaction } from "./indexer";
+import { usdcMint } from "./usdc";
 import { applyVaultMemo } from "../vault";
 
 export type StreamEvent = {
@@ -14,7 +15,7 @@ export type StreamEvent = {
   blockTime: number | null;
   memos: string[];
   badges: { mint: string; owner: string; pre: number; post: number }[];
-  deposits?: { from: string | null; amount: number; keys: string[] }[]; // USDC into the game, in base units (micro-USDC)
+  deposits?: { from: string | null; amount: number; keys: string[]; mint?: string }[]; // tokens into the game's vault, in base units
   programLogs?: string[]; // log lines of a Fortune Front program transaction (its events)
 };
 
@@ -73,7 +74,8 @@ export function applyEvents(events: StreamEvent[]) {
     // USDC deposits: credited once, here, after the webhook's signature check and this dedupe
     // Fortune Front program events: decoded and indexed (the indexer de-duplicates per event too)
     if (Array.isArray(e.programLogs) && e.programLogs.length) ingestTransaction(e.signature, e.slot, e.blockTime, e.programLogs.map(String));
-    for (const d of e.deposits ?? []) if (d.amount > 0 && Number.isInteger(d.amount)) creditDeposit({ signature: e.signature, from: d.from ?? "", usdc: d.amount, refs: Array.isArray(d.keys) ? d.keys.map(String) : [] });
+    const vaultMemo = e.memos.some((m) => m.startsWith(`${MEMO_PREFIX}:vault:`));
+    for (const d of e.deposits ?? []) if (!vaultMemo && (!d.mint || d.mint === usdcMint()) && d.amount > 0 && Number.isInteger(d.amount)) creditDeposit({ signature: e.signature, from: d.from ?? "", usdc: d.amount, refs: Array.isArray(d.keys) ? d.keys.map(String) : [] });
     chain.events.push(rec);
     applied++;
     for (const m of e.memos) {

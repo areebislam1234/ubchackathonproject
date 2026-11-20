@@ -11,6 +11,7 @@ import { ECONOMY } from "../shared/rules.js";
 import { db, feed, type Funds, type LedgerEntry, type Player } from "./db";
 import { GameError, award } from "./players";
 import * as chain from "./chain/onchain";
+import { creditUsdc, depositCredited, devCreditUsdc } from "./vault";
 import { getJson } from "./intel/http";
 
 export const MICRO = 1_000_000;
@@ -223,9 +224,11 @@ export function creditDeposit(d: { signature: string; from: string; usdc: number
     db.save();
     return null;
   }
+  if (depositCredited(d.signature)) return p; // already credited (the vault's own deposit flow, or a redelivery)
   const f = funds(p);
-  if (f.ledger.some((e) => e.signature === d.signature && e.kind === "deposit")) return p; // already credited
-  f.cash += d.usdc;
+  if (f.ledger.some((e) => e.signature === d.signature && e.kind === "deposit")) return p; // credited before the vault existed
+  // it lands in the vault as USDC, ready to trade
+  creditUsdc(p, d.usdc, d.signature);
   f.principal += d.usdc;
   record(p, { kind: "deposit", usdc: d.usdc, signature: d.signature, status: "confirmed" });
   feed({ kind: "economy", text: `${p.name} deposited ${(d.usdc / MICRO).toFixed(2)} USDC (confirmed by the Stream)`, signature: d.signature, player: p.id });
@@ -237,9 +240,9 @@ export function creditDeposit(d: { signature: string; from: string; usdc: number
 export function devCredit(p: Player, usdc: number) {
   const amount = toMicro(usdc);
   const f = funds(p);
-  f.cash += amount;
   f.principal += amount;
   record(p, { kind: "dev-credit", usdc: amount });
+  devCreditUsdc(p, amount); // test USDC goes straight into the vault
   db.save();
 }
 

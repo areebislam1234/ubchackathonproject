@@ -2357,3 +2357,48 @@ table.fights .lose {
 .coach.warn.vault-warn {
   background: var(--red-d);
 }
+
+/* ── Vault portfolio: holdings table and coin picker ────────────────── */
+.vault-table td,
+.vault-table th {
+  vertical-align: middle;
+}
+.coin-list {
+  display: grid;
+  gap: 2px;
+  max-height: 340px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+.coin-row {
+  display: grid;
+  grid-template-columns: 1fr auto 6em;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--parch);
+  border: 2px solid var(--parch-dd);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.coin-row.on {
+  border-color: var(--gold-d);
+  background: var(--gold-l);
+}
+.coin-row:focus-visible {
+  outline: 3px solid var(--blue);
+}
+#v-from {
+  min-width: 0;
+  flex: 1;
+}
+@media (max-width: 640px) {
+  .vault-table th:nth-child(5),
+  .vault-table td:nth-child(5),
+  .vault-table th:nth-child(6),
+  .vault-table td:nth-child(6) {
+    display: none;
+  }
+}

@@ -10,7 +10,7 @@ import { db, type Player } from "./db";
 import { GameError, assignDrill, bySession, disband, logout, markExplored, onBadge, playerView, refundMastery, register, sendHome, setFormation, setLoadout, unlockAbility, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, gemini, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, spawnHot, tick, world } from "./bounties";
 import { acceptChallenge, cancelChallenge, colosseumTick, colosseumView, devBotAccept, duelById, issueChallenge, onReceipt } from "./colosseum";
-import { accrueAll, airdrop, devSetPrice, prepareDeposit, submitDeposit, vaultSummary, vaultTick, vaultView, withdrawSol } from "./vault";
+import { accrueAll, airdrop, coinList, devSetPrice, devTestToken, prepareDeposit, prepareTokenDeposit, quotesFor, submitDeposit, trade, vaultSummary, vaultTick, vaultView, walletTokens, withdraw as vaultWithdraw } from "./vault";
 import { fightLog } from "./fightlog";
 import { crierLog, crierTick, flushOdds, marketList, movers, oddsSeries, oddsTick, onHotMarket, sampleNow, windowMs } from "./odds";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
@@ -166,7 +166,19 @@ app.get("/api/odds/:market", auth, wrap((req) => oddsSeries(String(req.params.ma
 app.get("/api/vault", auth, wrap((req) => vaultView(req.player)));
 app.post("/api/vault/deposit/prepare", auth, wrap((req) => prepareDeposit(req.player, req.body?.sol)));
 app.post("/api/vault/deposit/submit", auth, wrap((req) => submitDeposit(req.player, req.body ?? {})));
-app.post("/api/vault/withdraw", auth, wrap((req) => withdrawSol(req.player, req.body ?? {})));
+app.post("/api/vault/withdraw", auth, wrap((req) => vaultWithdraw(req.player, { asset: req.body?.asset ?? "SOL", amount: req.body?.amount ?? req.body?.sol, requestId: req.body?.requestId })));
+app.post("/api/vault/deposit/token/prepare", auth, wrap((req) => prepareTokenDeposit(req.player, req.body ?? {})));
+app.get("/api/vault/tokens", auth, wrap(async (req) => ({ tokens: await walletTokens(req.player) })));
+app.post("/api/vault/trade", auth, wrap((req) => trade(req.player, req.body ?? {})));
+app.get(
+  "/api/vault/coins",
+  auth,
+  wrap(async (req) => {
+    const coins = await coinList();
+    const want = typeof req.query.q === "string" && req.query.q ? coins.filter((c) => c.includes(String(req.query.q).toUpperCase())) : coins;
+    return { coins, quotes: await quotesFor(want.slice(0, Number(req.query.limit) || 60)) };
+  }),
+);
 app.post("/api/vault/airdrop", auth, wrap((req) => airdrop(req.player)));
 
 // ── The Colosseum ─────────────────────────────────────────────────────
@@ -378,6 +390,8 @@ app.post(
 );
 app.get("/api/dev/bounties", devOnly, auth, wrap(() => ({ bounties: devList(), now: Date.now() })));
 app.post("/api/dev/sol-price", devOnly, auth, wrap(async (req) => ({ price: await devSetPrice(req.body ?? {}) })));
+app.post("/api/dev/price", devOnly, auth, wrap(async (req) => ({ price: await devSetPrice(req.body ?? {}) })));
+app.post("/api/dev/test-token", devOnly, auth, wrap((req) => devTestToken(req.player)));
 app.post("/api/dev/vault-tick", devOnly, auth, wrap(async (req) => (await accrueAll(), vaultView(req.player))));
 app.post("/api/dev/duel-bot", devOnly, auth, wrap((req) => ({ accepted: devBotAccept(req.player) })));
 app.post(

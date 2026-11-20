@@ -204,6 +204,35 @@ export function economyBoard(mints?: { gold: string; might: string } | null) {
     return [...bal].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w, v]) => ({ name: walletOwner(w)?.name ?? `${w.slice(0, 4)}…${w.slice(-4)}`, playerId: walletOwner(w)?.id ?? null, balance: v }));
   };
 
+  // Portfolio: every vault's deposits (by asset), trades and the Might trading and holding earned
+  const vaults = Object.values(db.data.players).filter((p) => !p.bot && (p as any).vault?.holdings).map((p) => ({ p, v: (p as any).vault }));
+  const vEntries = vaults.flatMap(({ p, v }) => (v.ledger ?? []).map((e: any) => ({ ...e, player: p.name })));
+  const vDeposits = vEntries.filter((e) => e.kind === "deposit");
+  const vTrades = vEntries.filter((e) => e.kind === "trade");
+  const byAsset: Record<string, { count: number; usd: number }> = {};
+  for (const e of vDeposits) {
+    const k = String(e.asset ?? "SOL").startsWith("mint:") ? "Other tokens" : String(e.asset ?? "SOL");
+    byAsset[k] ??= { count: 0, usd: 0 };
+    byAsset[k].count++;
+    byAsset[k].usd += e.usd ?? 0;
+  }
+  const traded: Record<string, number> = {};
+  for (const e of vTrades) for (const c of [e.from, e.to]) if (c && c !== "USDC") traded[c] = (traded[c] ?? 0) + 1;
+  const portfolio = {
+    players: vaults.length,
+    deposits: vDeposits.length,
+    depositsByAsset: Object.entries(byAsset).sort((a, b) => b[1].usd - a[1].usd).map(([asset, x]) => ({ asset, ...x })),
+    trades: vTrades.length,
+    volume: vTrades.reduce((s, e) => s + (e.usd ?? 0), 0),
+    realizedProfit: vTrades.reduce((s, e) => s + Math.max(0, e.realized ?? 0), 0),
+    realizedLoss: vTrades.reduce((s, e) => s + Math.min(0, e.realized ?? 0), 0),
+    mightTrading: vaults.reduce((s, { v }) => s + (v.mightTrading ?? 0), 0),
+    mightHodl: vaults.reduce((s, { v }) => s + (v.mightHodl ?? 0), 0),
+    mostTraded: Object.entries(traded).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([coin, n]) => ({ coin, n })),
+    history: series(vTrades.map((e) => ({ at: e.at, v: e.usd ?? 0 }))),
+    sources: vDeposits.filter((e) => e.signature).slice(-12).reverse().map((e) => ({ signature: e.signature, status: e.streamed ? "finalized" : "confirmed", url: explorerTx(e.signature) })),
+  };
+
   // USDC: deposits and withdrawals are real devnet USDC transfers the QuickNode Stream confirmed
   const ledgers = Object.values(db.data.players).flatMap((p) => (p.funds?.ledger ?? []).map((l) => ({ ...l, player: p.name })));
   const deposits = ledgers.filter((l) => l.kind === "deposit");
@@ -261,6 +290,7 @@ export function economyBoard(mints?: { gold: string; might: string } | null) {
       sources: usdcSrc([...deposits, ...withdrawals].sort((a, b) => a.at - b.at)),
       sourceNote: "Deposits and withdrawals are devnet USDC transfers confirmed through the QuickNode Stream.",
     },
+    portfolio,
     events: ev.length,
     local: ev.filter((e) => e.status === "local").length,
     finalized: ev.filter((e) => e.status === "finalized").length,
