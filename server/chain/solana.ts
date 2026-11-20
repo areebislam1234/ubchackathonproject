@@ -70,7 +70,13 @@ export async function loadAuthority({ create = IS_LOCAL } = {}): Promise<KeyPair
 }
 
 export function badgeMints(): Record<string, string> {
-  return fs.existsSync(BADGES_FILE) ? JSON.parse(fs.readFileSync(BADGES_FILE, "utf8")) : {};
+  if (fs.existsSync(BADGES_FILE)) return JSON.parse(fs.readFileSync(BADGES_FILE, "utf8"));
+  // a hosted server: the mints made by `npm run setup-solana`, pasted in as JSON (public addresses only)
+  try {
+    return process.env.BADGE_MINTS ? JSON.parse(process.env.BADGE_MINTS) : {};
+  } catch {
+    return {};
+  }
 }
 
 // ── Sending ───────────────────────────────────────────────────────────

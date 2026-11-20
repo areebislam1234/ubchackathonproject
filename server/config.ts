@@ -14,7 +14,7 @@ if (NETWORK !== "local" && NETWORK !== "devnet") throw new Error(`NETWORK must b
 export const IS_LOCAL = NETWORK === "local";
 
 export const env = {
-  gamePort: num(process.env.GAME_PORT, 4000),
+  gamePort: num(process.env.GAME_PORT || process.env.PORT, 4000), // hosts like Railway and Render set PORT
   mockGeminiPort: num(process.env.MOCK_GEMINI_PORT, 4100),
   localChainPort: num(process.env.LOCAL_CHAIN_PORT, 8899),
   geminiMode: str(process.env.GEMINI_MODE, "mock") as "mock" | "live",

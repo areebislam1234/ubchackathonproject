@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "start": "tsx scripts/dev.ts",
     "dev": "tsx scripts/dev.ts",
     "test": "tsx scripts/e2e.ts",
     "server": "tsx server/index.ts",
@@ -34,12 +35,12 @@
     "@solana/kit": "^8.6.0",
     "dotenv": "^18.0.10",
     "express": "^5.3.0",
-    "litesvm": "^1.6.2"
+    "litesvm": "^1.6.2",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
