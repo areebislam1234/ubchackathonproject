@@ -1,6 +1,0 @@
-node_modules/
-.env
-.data/
-streams/quicknode-solana-filter.local.js
-*.log
-.DS_Store
