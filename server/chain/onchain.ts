@@ -362,7 +362,10 @@ async function drain() {
       if (await confirm(item.sig)) item.status = "confirmed";
       else return; // not confirmed yet: stays "sent" and is looked up on the next pass
     } catch (e) {
-      item.error = (e as Error).message.slice(0, 200);
+      // a simulation failure carries the program's logs in its context: keep the useful line, not just "-32002"
+      const logs = ((e as any)?.cause?.context?.logs ?? (e as any)?.context?.logs ?? []) as string[];
+      const why = logs.filter((l) => /failed|exceeded|Error/.test(l)).slice(-2).join(" | ");
+      item.error = (why ? `${why} (${(e as Error).message.slice(0, 40)})` : (e as Error).message).slice(0, 300);
       item.status = item.tries >= 5 ? "failed" : "queued";
       if (item.status === "failed") console.warn(`on-chain ${item.op} #${item.id} failed: ${item.error}`);
       settleWaiter(item);
@@ -390,7 +393,7 @@ async function build(item: QueueItem, a: Address, m: P.Mints) {
     case "convert": return [await P.convertYieldIx(a, m, w!, x.usdc, x.might)];
     case "stake": return [await P.escrowStakeIx(a, x.mint === "gold" ? m.gold : m.might, x.mint === "gold", w!, x.id, x.amount, x.memo)];
     case "release": return [await P.releaseStakeIx(a, x.mint === "gold" ? m.gold : m.might, x.mint === "gold", x.id, keyOf(x.to), x.pay, x.burn, x.memo)];
-    case "battle": return [await P.resolveBattleIx(a, x.kind, x.context, x.attacker, x.defender, x.atk ? keyOf(x.atk) : null, x.def ? keyOf(x.def) : null)];
+    case "battle": return [P.setComputeUnitLimitIx(1_400_000), await P.resolveBattleIx(a, x.kind, x.context, x.attacker, x.defender, x.atk ? keyOf(x.atk) : null, x.def ? keyOf(x.def) : null)];
   }
   return null;
 }
