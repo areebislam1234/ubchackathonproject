@@ -7,7 +7,7 @@ import { PALETTE, SPRITES } from "../shared/sprites.js";
 import { verifyStreamSignature } from "../shared/hmac";
 import { IS_LOCAL, NETWORK, ROOT, env, explorerAddress, explorerTx, geminiBaseUrl } from "./config";
 import { db, type Player } from "./db";
-import { GameError, assignDrill, bySession, disband, logout, markExplored, onBadge, playerView, register, sendHome, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
+import { GameError, assignDrill, bySession, disband, logout, markExplored, onBadge, playerView, register, sendHome, setFormation, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, gemini, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, spawnHot, tick, world } from "./bounties";
 import { acceptChallenge, cancelChallenge, colosseumTick, colosseumView, devBotAccept, duelById, issueChallenge, onReceipt } from "./colosseum";
 import { crierLog, crierTick, flushOdds, marketList, movers, oddsSeries, oddsTick, onHotMarket, sampleNow, windowMs } from "./odds";
@@ -146,7 +146,7 @@ app.get("/api/bounties", auth, wrap((req) => ({ bounties: mapFor(req.player), no
 app.get("/api/bounties/:id", auth, wrap((req) => bountyFor(req.player, String(req.params.id))));
 app.post("/api/bounties/:id/enter", auth, wrap((req) => enter(req.player, String(req.params.id))));
 app.get("/api/bounties/:id/opponents", auth, wrap((req) => ({ opponents: opponents(req.player, String(req.params.id)) })));
-app.post("/api/bounties/:id/attack", auth, wrap((req) => attack(req.player, String(req.params.id), String(req.body?.opponent ?? "guardian"), req.body?.units ?? {})));
+app.post("/api/bounties/:id/attack", auth, wrap((req) => attack(req.player, String(req.params.id), String(req.body?.opponent ?? "guardian"), req.body?.units ?? {}, { formation: req.body?.formation, preset: req.body?.preset, order: req.body?.order })));
 app.post("/api/bounties/:id/predict", auth, wrap((req) => predict(req.player, String(req.params.id), req.body?.side, req.body?.confBps, req.body?.stake)));
 app.get("/api/battles/:id", auth, wrap((req) => battle(String(req.params.id))));
 
@@ -181,7 +181,7 @@ app.post(
     // the hero's position, reported the same way /api/explore reports it
     const pos = req.body?.pos;
     if (pos && Number.isInteger(pos.x) && Number.isInteger(pos.y)) req.player.pos = { x: pos.x, y: pos.y };
-    return challenge(req.player, String(req.params.id), req.body?.units ?? {}, req.body?.requestId);
+    return challenge(req.player, String(req.params.id), req.body?.units ?? {}, req.body?.requestId, { plan: { formation: req.body?.formation, preset: req.body?.preset, order: req.body?.order } });
   }),
 );
 
@@ -222,6 +222,7 @@ app.post(
     return { recipient: t.owner, account: t.account, mint: t.mint, reference, url: solanaPayUrl(t.owner, t.mint, amount, reference), linkedWallet: req.player.wallet?.address ?? null };
   }),
 );
+app.post("/api/army/formation", auth, wrap((req) => (setFormation(req.player, req.body ?? {}), playerView(req.player))));
 app.post("/api/army/mastery", auth, wrap((req) => (buyMastery(req.player, String(req.body?.unit)), playerView(req.player))));
 
 // ── Fortress and army ─────────────────────────────────────────────────

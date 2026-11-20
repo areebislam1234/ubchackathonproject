@@ -4,6 +4,7 @@ import { COUNTERS, DRILLS, MASTERY, UNITS, UNIT_KEYS, drillBonus, masteryBonus, 
 import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
+import { openFormation } from "./formation.js";
 import { act, esc, fmt, openSheet, toast } from "../ui.js";
 
 const beats = (k) =>
@@ -40,10 +41,12 @@ export function openArmy(G) {
     <p class="sub">Your army fights your attacks and, frozen at the moment you enter, defends you inside each bounty. Units that fall in an attack are gone, so keep training.</p>
     <div class="row spread"><b style="font:400 22px var(--display)">Housing ${d.housing}/${d.capacity}</b><span class="note">${icon("coin", 2)} ${fmt(m.gold)} gold · power ${armyPower(m.army, m.unitLevels)}</span></div>
     <div class="capbar"><i style="width:${Math.min(100, (d.housing / d.capacity) * 100)}%"></i></div>
+    <div class="row" style="margin:8px 0"><button class="btn btn-gold" id="open-formation">Formation &amp; orders</button><span class="note">${m.formation?.manual ? "Hand-placed formation" : `Preset: ${esc(m.formation?.preset ?? "shieldwall")}`} · order ${esc(m.formation?.order ?? "hold")}</span></div>
     ${drillBanner(m)}
     <div class="cards" style="margin-top:12px">${UNIT_KEYS.map((k) => unitCard(G, k)).join("")}</div>
   `,
   );
+  body.querySelector("#open-formation")?.addEventListener("click", () => openFormation(G));
   for (const b of body.querySelectorAll("[data-act]"))
     b.addEventListener("click", (e) =>
       act(e.currentTarget, async () => {

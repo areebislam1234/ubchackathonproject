@@ -47,7 +47,13 @@ export type Player = {
   mastery?: Record<string, number>; // Mastery rank per unit type
   fundClaims?: Record<string, { at: number; response: unknown }>; // money requestId → result (idempotency)
   colosseum?: { duels: number; steelWins: number; foresightWins: number; mightWon: number; claims?: Record<string, { at: number; response: unknown }> };
+  formation?: SavedFormation; // battle formation (also used to defend inside bounties)
 };
+
+export type FormationSlot = { unit: string; n: number } | null;
+export type Formation = { slots: FormationSlot[]; order: string; preset?: string | null };
+/** manual: the player placed troops by hand; otherwise the preset is re-applied to the current army. */
+export type SavedFormation = Formation & { manual: boolean };
 
 export type LedgerEntry = {
   at: number;
@@ -101,6 +107,7 @@ export type Entry = {
   towers: number;
   boosts?: Record<string, number>; // damage bonuses (relics, drills), frozen at entry like the army
   vigor?: Record<string, number>; // HP bonuses (drills)
+  formation?: Formation; // how this entrant defends, frozen at entry like the army
   botPlan?: number[]; // bots: times of their attacks
 };
 
@@ -157,13 +164,14 @@ export type Champion = { look: string; hp: number; dmg: number; range: number; s
 
 export type BattleRecord = {
   id: string;
+  engine?: number; // 2 = formations and rounds; missing = the original engine (old records)
   bounty: string;
   at: number;
   seed: number;
-  attacker: { id: string; name: string; units: UnitMap; levels: UnitMap; boosts?: Record<string, number>; vigor?: Record<string, number> };
-  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean; champions?: Champion[]; boosts?: Record<string, number>; vigor?: Record<string, number> };
+  attacker: { id: string; name: string; units: UnitMap; levels: UnitMap; boosts?: Record<string, number>; vigor?: Record<string, number>; formation?: Formation };
+  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean; champions?: Champion[]; boosts?: Record<string, number>; vigor?: Record<string, number>; formation?: Formation };
   boss?: string; // lair id, for boss fights (bounty is then "lair:<id>")
-  result: { winner: string; ticks: number; destruction: number; survival: number; score: number; lost: UnitMap };
+  result: { winner: string; ticks: number; destruction: number; survival: number; score: number; lost: UnitMap; report?: unknown; orders?: string[] };
 };
 
 export type FeedItem = { at: number; kind: string; text: string; bounty?: string; signature?: string; player?: string; market?: string; duel?: string };

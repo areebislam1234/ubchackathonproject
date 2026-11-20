@@ -7,6 +7,8 @@ import { mulberry32, strSeed } from "../shared/rng.js";
 import {
   ATTACKS_PER_BOUNTY,
   BOT_NAMES,
+  autoFormation,
+  formationArmy,
   DEFENSE_POINTS,
   TIERS,
   UNIT_KEYS,
@@ -23,7 +25,7 @@ import { BOSSES } from "../shared/rules.js";
 import { GeminiClient, contractPricesBps, type MarketSummary } from "../gemini/client";
 import { env } from "./config";
 import { db, feed, type BattleRecord, type Bounty, type Entry, type Player } from "./db";
-import { COMBAT_MS, GameError, addGold, award, boostsOf, exploredBytes, newPlayer, relicFx, vigorOf } from "./players";
+import { COMBAT_MS, GameError, addGold, award, boostsOf, exploredBytes, fieldFormation, newPlayer, relicFx, vigorOf } from "./players";
 
 export const world = generateWorld();
 /** Fixed boss lairs (same on every server and browser for this world seed). */
@@ -309,7 +311,7 @@ export function enter(p: Player, id: string) {
 }
 
 function snapshotEntry(p: Player): Entry {
-  return { playerId: p.id, name: p.name, bot: !!p.bot, joinedAt: now(), score: 0, attacks: 0, defense: 0, best: 0, army: { ...p.army }, levels: { ...p.unitLevels }, towers: p.buildings.towers + relicFx(p).towers, boosts: boostsOf(p), vigor: vigorOf(p) };
+  return { playerId: p.id, name: p.name, bot: !!p.bot, joinedAt: now(), score: 0, attacks: 0, defense: 0, best: 0, army: { ...p.army }, levels: { ...p.unitLevels }, towers: p.buildings.towers + relicFx(p).towers, boosts: boostsOf(p), vigor: vigorOf(p), formation: fieldFormation(p) };
 }
 
 export function opponents(p: Player, id: string) {
@@ -324,21 +326,16 @@ export function opponents(p: Player, id: string) {
 
 const LOOT = { common: 40, rare: 70, epic: 110 };
 
-export function attack(p: Player, id: string, opponentId: string, units: Record<string, number>) {
+export function attack(p: Player, id: string, opponentId: string, units: Record<string, number>, plan: { formation?: unknown; preset?: unknown; order?: unknown } = {}) {
   const b = db.data.bounties[id];
   if (!b) throw new GameError("No such bounty.", 404);
   if (b.status !== "active") throw new GameError(b.status === "upcoming" ? "The bounty hasn't started yet." : "This bounty's battles are over.");
   const entry = b.entries[p.id];
   if (!entry) throw new GameError("Enter the bounty first.");
   if (entry.attacks >= ATTACKS_PER_BOUNTY) throw new GameError(`You've used all ${ATTACKS_PER_BOUNTY} attacks in this bounty.`);
-  const sent: Record<string, number> = {};
-  for (const k of UNIT_KEYS) {
-    const n = Math.max(0, Math.floor(units?.[k] ?? p.army[k] ?? 0));
-    if (n > (p.army[k] ?? 0)) throw new GameError(`You only have ${p.army[k] ?? 0} ${k}.`);
-    if (n) sent[k] = n;
-  }
-  if (!Object.keys(sent).length) throw new GameError("Send at least one unit.");
-  const rec = fight(b, { id: p.id, name: p.name, units: sent, levels: p.unitLevels, boosts: boostsOf(p), vigor: vigorOf(p) }, opponentId);
+  const formation = attackFormation(p, units, plan);
+  const sent = formationArmy(formation);
+  const rec = fight(b, { id: p.id, name: p.name, units: sent, levels: p.unitLevels, boosts: boostsOf(p), vigor: vigorOf(p), formation }, opponentId);
   p.lastCombatAt = now();
   // casualties come out of your army
   for (const [k, n] of Object.entries(rec.result.lost)) p.army[k] = Math.max(0, (p.army[k] ?? 0) - n);
@@ -354,21 +351,45 @@ export function attack(p: Player, id: string, opponentId: string, units: Record<
   return { battle: rec, loot: Math.round(loot), bounty: bountyFor(p, id) };
 }
 
+/**
+ * The formation for an attack: a full formation from the client, a preset/order for this fight, or
+ * the player's saved formation. An older client sending only `units` gets them auto-placed.
+ */
+export function attackFormation(p: Player, units: Record<string, number> | undefined, plan: { formation?: unknown; preset?: unknown; order?: unknown }) {
+  if (!plan.formation && units && Object.keys(units).length && !plan.preset) {
+    const sent: Record<string, number> = {};
+    for (const k of UNIT_KEYS) {
+      const n = Math.max(0, Math.floor(Number(units[k] ?? 0) || 0));
+      if (n > (p.army[k] ?? 0)) throw new GameError(`You only have ${p.army[k] ?? 0} ${k}.`);
+      if (n) sent[k] = n;
+    }
+    if (!Object.keys(sent).length) throw new GameError("Send at least one unit.");
+    const base = fieldFormation(p, { order: plan.order });
+    return autoFormation(sent, base.preset ?? "shieldwall", base.order);
+  }
+  const f = fieldFormation(p, plan);
+  if (!f.slots.some(Boolean)) throw new GameError("Train some units first.");
+  return f;
+}
+
+const GUARDIAN_PRESET = { common: "shieldwall", rare: "ranged", epic: "assault" } as const;
+
 /** Run one attack inside a bounty and update scores. Used by players and bots. */
-function fight(b: Bounty, atk: { id: string; name: string; units: Record<string, number>; levels: Record<string, number>; boosts?: Record<string, number>; vigor?: Record<string, number> }, opponentId: string): BattleRecord {
+function fight(b: Bounty, atk: { id: string; name: string; units: Record<string, number>; levels: Record<string, number>; boosts?: Record<string, number>; vigor?: Record<string, number>; formation?: any }, opponentId: string): BattleRecord {
   const entry = b.entries[atk.id];
   let defender: BattleRecord["defender"];
   const defEntry = opponentId !== "guardian" ? b.entries[opponentId] : null;
   if (opponentId === "guardian") {
     const g = guardianArmy(b.tier);
-    defender = { id: "guardian", name: `${b.id} Guardian`, units: g.units, levels: g.levels, towers: g.towers, guardian: true };
+    defender = { id: "guardian", name: `${b.id} Guardian`, units: g.units, levels: g.levels, towers: g.towers, guardian: true, formation: autoFormation(g.units, GUARDIAN_PRESET[b.tier]) };
   } else {
     if (!defEntry) throw new GameError("That rival isn't in this bounty.");
     if (opponentId === atk.id) throw new GameError("You can't attack yourself.");
-    defender = { id: defEntry.playerId, name: defEntry.name, units: defEntry.army, levels: defEntry.levels, towers: defEntry.towers, ...(defEntry.boosts ? { boosts: defEntry.boosts } : {}), ...(defEntry.vigor ? { vigor: defEntry.vigor } : {}) };
+    defender = { id: defEntry.playerId, name: defEntry.name, units: defEntry.army, levels: defEntry.levels, towers: defEntry.towers, ...(defEntry.boosts ? { boosts: defEntry.boosts } : {}), ...(defEntry.vigor ? { vigor: defEntry.vigor } : {}), formation: defEntry.formation ?? autoFormation(defEntry.army, "shieldwall") };
   }
   const seed = crypto.randomBytes(4).readUInt32LE(0);
-  const result = simulate({ attacker: { units: atk.units, levels: atk.levels, boosts: atk.boosts, vigor: atk.vigor }, defender, seed });
+  const atkFormation = atk.formation ?? autoFormation(atk.units, "shieldwall");
+  const result = simulate({ engine: 2, attacker: { units: atk.units, levels: atk.levels, boosts: atk.boosts, vigor: atk.vigor, formation: atkFormation }, defender, seed });
   entry.attacks++;
   entry.score += result.score;
   entry.best = Math.max(entry.best, result.score);
@@ -376,7 +397,7 @@ function fight(b: Bounty, atk: { id: string; name: string; units: Record<string,
     defEntry.defense += DEFENSE_POINTS;
     defEntry.score += DEFENSE_POINTS;
   }
-  const rec: BattleRecord = { id: `F-${++db.data.meta.battleSeq}`, bounty: b.id, at: now(), seed, attacker: { id: atk.id, name: atk.name, units: atk.units, levels: atk.levels, ...(atk.boosts ? { boosts: atk.boosts } : {}), ...(atk.vigor ? { vigor: atk.vigor } : {}) }, defender, result };
+  const rec: BattleRecord = { id: `F-${++db.data.meta.battleSeq}`, engine: 2, bounty: b.id, at: now(), seed, attacker: { id: atk.id, name: atk.name, units: atk.units, levels: atk.levels, ...(atk.boosts ? { boosts: atk.boosts } : {}), ...(atk.vigor ? { vigor: atk.vigor } : {}), formation: atkFormation }, defender, result };
   db.data.battles[rec.id] = rec;
   const verb = result.winner === "attacker" ? "crushed" : "was repelled by";
   feed({ kind: "battle", text: `${atk.name} ${verb} ${defender.name} in ${b.id} (+${result.score})`, bounty: b.id, player: atk.id });
@@ -508,7 +529,7 @@ function runBots(b: Bounty) {
     const rivals = Object.values(b.entries).filter((x) => x.playerId !== e.playerId);
     const humans = rivals.filter((x) => !x.bot);
     const target = humans.length && rnd() < 0.5 ? pick(humans) : rivals.length && rnd() < 0.7 ? pick(rivals) : null;
-    const rec = fight(b, { id: e.playerId, name: e.name, units: e.army, levels: e.levels }, target?.playerId ?? "guardian");
+    const rec = fight(b, { id: e.playerId, name: e.name, units: e.army, levels: e.levels, formation: e.formation }, target?.playerId ?? "guardian");
     if (target && !target.bot && rec.result.winner === "defender") feed({ kind: "defend", text: `${target.name} held off ${e.name} in ${b.id} (+${DEFENSE_POINTS} defense)`, bounty: b.id, player: target.playerId });
     void window;
   }

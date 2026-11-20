@@ -7,6 +7,7 @@ import { icon, spriteUrl } from "../gfx.js";
 import { $, act, cents, closeSheet, currentSheet, esc, fmt, openSheet, pct, timeLeft, toast } from "../ui.js";
 import { openBattle } from "./battle.js";
 import { changeTag, oddsChart, plainOdds } from "../odds-chart.js";
+import { planPicker } from "./formation.js";
 
 let cur = null; // { id, data, view: "info" | "prep", sig }
 const STATUS = { upcoming: "Upcoming", active: "Active", revealed: "Question revealed", resolved: "Settled" };
@@ -318,13 +319,7 @@ async function renderPrep(G) {
         <span class="stats">${UNIT_KEYS.filter((k) => o.army?.[k]).map((k) => `${o.army[k]} ${UNITS[k].name}`).join(" · ")}</span></label>`,
       )
       .join("")}</div>
-    <h3>Your strike force</h3>
-    <div class="cards" id="send">${UNIT_KEYS.filter((k) => (me.army[k] ?? 0) > 0)
-      .map(
-        (k) => `<div class="card"><div class="row"><img src="${spriteUrl(`${k}_0`, 3)}" width="48" height="48" alt=""><div><h4>${UNITS[k].name}</h4><span class="stats">Lv ${me.unitLevels[k]} · ${UNITS[k].role}</span></div></div>
-        <div class="stepper"><button class="btn btn-small btn-ghost" data-k="${k}" data-d="-1">−</button><output id="n-${k}">${send[k]}</output><button class="btn btn-small btn-ghost" data-k="${k}" data-d="1">+</button><span class="note">of ${me.army[k]}</span></div></div>`,
-      )
-      .join("") || `<p class="note">You have no units. Train some in the Army screen.</p>`}</div>
+    <div id="plan"></div>
     <div class="coach" id="matchup"></div>
     <button class="btn btn-fight btn-big" id="go-fight">Attack!</button>
   `,
@@ -334,26 +329,19 @@ async function renderPrep(G) {
     const mine = armyPower(send, me.unitLevels);
     const odds = o ? mine / Math.max(1, mine + o.power) : 0;
     body.querySelector("#matchup").innerHTML = o
-      ? `Your power <b>${mine}</b> vs <b>${o.power}</b>. ${odds > 0.6 ? "You should win this." : odds > 0.45 ? "An even fight. Counters will decide it." : "Outmatched. Aim for damage, not victory."} Cavalry crush archers and siege, spears stop cavalry, archers shred infantry, siege wrecks tanks and towers.`
+      ? `Your power <b>${mine}</b> vs <b>${o.power}</b>. ${odds > 0.6 ? "You should win this." : odds > 0.45 ? "An even fight. Counters will decide it." : "Outmatched. Aim for damage, not victory."} Raiders dive at Rangers, Artillery and Support; Guardians stop Raiders; Rangers pierce Guardians; Artillery punishes big stacks.`
       : "";
   };
   matchup();
   for (const r of body.querySelectorAll('input[name="opp"]')) r.addEventListener("change", () => ((target = r.value), matchup()));
-  for (const b of body.querySelectorAll("[data-k]"))
-    b.addEventListener("click", () => {
-      const k = b.dataset.k;
-      send[k] = Math.max(0, Math.min(me.army[k], send[k] + Number(b.dataset.d)));
-      body.querySelector(`#n-${k}`).textContent = send[k];
-      sfx("click");
-      matchup();
-    });
+  const plan = planPicker(G, body.querySelector("#plan"));
   body.querySelector("#prep-back").addEventListener("click", () => {
     cur.view = "info";
     render(G);
   });
   body.querySelector("#go-fight").addEventListener("click", (e) =>
     act(e.currentTarget, async () => {
-      const r = await api(`/api/bounties/${d.id}/attack`, { body: { opponent: target, units: send } });
+      const r = await api(`/api/bounties/${d.id}/attack`, { body: { opponent: target, ...plan() } });
       cur.data = r.bounty;
       cur.view = "info";
       closeSheet();

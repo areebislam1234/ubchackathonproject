@@ -6,6 +6,7 @@ import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
 import { act, closeSheet, currentSheet, esc, fmt, openSheet, timeLeft, toast } from "../ui.js";
 import { openBattle } from "./battle.js";
+import { planPicker } from "./formation.js";
 
 let cur = null; // { id, data, send, requestId }
 const reachFor = (scale) => 4 + (scale - 1) * 1.5;
@@ -61,31 +62,17 @@ function render(G) {
       <div class="fact"><b>${fmt(mine)}</b><span>Your power</span></div>
       <div class="fact"><b>${wait > 0 ? timeLeft(wait) : "Ready"}</b><span>${wait > 0 ? "Returns in" : "Status"}</span></div>
     </div>
-    <div class="coach">${verdict} Siege and Tanks hit bosses hard; arrows barely scratch them.</div>
+    <div class="coach">${verdict} Siege and Shieldguards hit bosses 50% harder. Its guards stand in their own formation; pick yours below.</div>
     <h3>Guards</h3>
     <p class="stats">${UNIT_KEYS.filter((k) => d.army.units[k]).map((k) => `${d.army.units[k]} ${UNITS[k].name}`).join(" · ")} · level ${d.army.levels.infantry}${d.army.towers ? ` · ${d.army.towers} tower${d.army.towers > 1 ? "s" : ""}` : ""}</p>
     <h3>Spoils</h3>
     <p class="note">${icon("helmet", 1)} <b>${DRILLS.perTier[d.tier]} drill point${DRILLS.perTier[d.tier] > 1 ? "s" : ""}</b>: a minor army upgrade (+${DRILLS.perPoint * 100}% HP and damage per point for the unit you choose). You can earn ${DRILLS.dailyCap} a day; ${G.me.drills?.todayLeft ?? DRILLS.dailyCap} left today.${BOSS_TIERS[d.tier].loot.relic ? ` ${icon("crown", 1)} ${Math.round(BOSS_TIERS[d.tier].loot.relic * 100)}% chance of a relic.` : ""} ${icon(cat?.icon ?? "scroll", 1)} ${Math.round(BOSS_TIERS[d.tier].intel.chance * 100)}% chance of a <b>${esc(cat?.name ?? "")} intelligence report</b>. After every attempt it retreats for ${d.cooldownMin} minutes.</p>
-    <h3>Your strike force</h3>
-    <div class="cards" id="lair-send">${
-      UNIT_KEYS.filter((k) => (me.army[k] ?? 0) > 0)
-        .map(
-          (k) => `<div class="card"><div class="row"><img src="${spriteUrl(`${k}_0`, 3)}" width="48" height="48" alt=""><div><h4>${UNITS[k].name}</h4><span class="stats">Lv ${me.unitLevels[k]}</span></div></div>
-        <div class="stepper"><button class="btn btn-small btn-ghost" data-k="${k}" data-d="-1">−</button><output id="ln-${k}">${cur.send[k]}</output><button class="btn btn-small btn-ghost" data-k="${k}" data-d="1">+</button><span class="note">of ${me.army[k]}</span></div></div>`,
-        )
-        .join("") || `<p class="note">You have no units. Train some in the Army screen (R).</p>`
-    }</div>
+    <div id="lair-plan"></div>
     <div class="row" id="lair-actions">${actionHtml(G, d, wait)}</div>
   `,
   );
   const body = document.getElementById("sheet-body");
-  for (const b of body.querySelectorAll("[data-k]"))
-    b.addEventListener("click", () => {
-      const k = b.dataset.k;
-      cur.send[k] = Math.max(0, Math.min(me.army[k] ?? 0, cur.send[k] + Number(b.dataset.d)));
-      sfx("click");
-      render(G);
-    });
+  cur.plan = planPicker(G, body.querySelector("#lair-plan"));
   body.querySelector("#lair-go")?.addEventListener("click", (e) => act(e.currentTarget, () => fight(G)));
   body.querySelector("#lair-walk")?.addEventListener("click", () => {
     if (G.setCourse(d.x, d.y + 1)) {
@@ -113,7 +100,7 @@ async function fight(G) {
   const d = cur.data;
   const hero = { x: Math.floor(G.view.hero.x / 16), y: Math.floor((G.view.hero.y - 2) / 16) };
   // The same request id is reused if this click is retried, so the server never pays twice.
-  const r = await api(`/api/bosses/${d.id}/challenge`, { body: { units: cur.send, requestId: cur.requestId, pos: hero } });
+  const r = await api(`/api/bosses/${d.id}/challenge`, { body: { ...cur.plan(), requestId: cur.requestId, pos: hero } });
   cur.requestId = newRequestId();
   closeSheet();
   openBattle(G, r.battle, {

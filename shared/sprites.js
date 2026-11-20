@@ -548,6 +548,26 @@ const SIEGE = [
   "....................",
 ];
 const SIEGE_HIT = SIEGE.map((r, y) => (y <= 8 ? ["....................", "....................", "........kk..........", ".......krrk.........", ".......kRRk.........", "........kbk.....kuk.", ".......kbbk.....kuuk", "......kbbk......kuk.", ".....kbbk.......kk.."][y] : r));
+// Chaplain (Support): a hooded healer with a glowing staff
+const SUPPORT = [
+  "................",
+  ".....kkkk....kk.",
+  "....kqqqqk..kzzk",
+  "....kqiiqk...kak",
+  "....kkiikk...kbk",
+  ".....kiik....kbk",
+  "....kuqquk..kbk.",
+  "...kqquuqqkkbk..",
+  "...kqquuqqiik...",
+  "...kqqquqqkk....",
+  "....kqqqqqk.....",
+  "....kququqk.....",
+  "...kqqqqqqqk....",
+  "...kkkkkkkkk....",
+  "................",
+  "................",
+];
+const SUPPORT_HIT = SUPPORT.map((r, y) => (y === 1 ? ".....kkkk...kxxk" : y === 2 ? "....kqqqqk..kzxk" : r));
 const WATCHTOWER_DEF = tower({ roof: "red", w: 12, wall: 14, seed: 41 });
 
 const WAYSTONE = [
@@ -911,7 +931,7 @@ S.hero_right_0 = sprite(HERO_SIDE);
 S.hero_right_1 = sprite(HERO_SIDE_STEP);
 S.hero_left_0 = mirror(S.hero_right_0);
 S.hero_left_1 = mirror(S.hero_right_1);
-const UNITS = { infantry: [INFANTRY, INFANTRY_HIT], archer: [ARCHER, ARCHER_HIT], tank: [TANK, TANK_HIT], cavalry: [CAVALRY, CAVALRY_HIT], siege: [SIEGE, SIEGE_HIT] };
+const UNITS = { infantry: [INFANTRY, INFANTRY_HIT], archer: [ARCHER, ARCHER_HIT], tank: [TANK, TANK_HIT], cavalry: [CAVALRY, CAVALRY_HIT], siege: [SIEGE, SIEGE_HIT], support: [SUPPORT, SUPPORT_HIT] };
 for (const [k, [a, b]] of Object.entries(UNITS)) {
   S[`${k}_0`] = sprite(a);
   S[`${k}_1`] = sprite(b);

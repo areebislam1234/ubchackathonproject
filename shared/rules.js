@@ -2,13 +2,141 @@
 
 // ── Army ──────────────────────────────────────────────────────────────
 export const UNITS = {
-  infantry: { name: "Infantry", role: "Spear wall. Cheap, sturdy, beats Cavalry.", hp: 110, dmg: 12, range: 1.3, speed: 1.0, cooldown: 10, housing: 1, cost: 10, unlock: 1 },
-  archer: { name: "Archers", role: "Ranged volleys. Shreds Infantry from behind the line.", hp: 65, dmg: 11, range: 6, speed: 1.0, cooldown: 12, housing: 1, cost: 14, unlock: 1 },
-  tank: { name: "Tanks", role: "Heavy shieldguard. Soaks arrows, holds the front.", hp: 320, dmg: 9, range: 1.3, speed: 0.65, cooldown: 11, housing: 3, cost: 35, unlock: 2 },
-  cavalry: { name: "Cavalry", role: "Fast flankers. Crush Archers and Siege.", hp: 150, dmg: 17, range: 1.4, speed: 1.9, cooldown: 10, housing: 2, cost: 25, unlock: 3 },
-  siege: { name: "Siege", role: "Catapults. Slow, splash damage, wreck Tanks and towers.", hp: 120, dmg: 38, range: 8, speed: 0.5, cooldown: 26, housing: 4, cost: 45, unlock: 4, splash: 1.6 },
+  infantry: { name: "Spearmen", role: "Light Guardians. Cheap frontline that shields the troops behind and stops Raiders.", hp: 110, dmg: 12, range: 1.3, speed: 1.0, cooldown: 10, housing: 1, cost: 10, unlock: 1 },
+  archer: { name: "Archers", role: "Rangers. Shoot from behind the line, pierce Guardian armour, punish exposed troops.", hp: 65, dmg: 11, range: 6, speed: 1.0, cooldown: 12, housing: 1, cost: 14, unlock: 1 },
+  tank: { name: "Shieldguards", role: "Heavy Guardians. Absorb a third of the damage aimed at troops behind them and crush Raiders.", hp: 320, dmg: 9, range: 1.3, speed: 0.65, cooldown: 11, housing: 3, cost: 35, unlock: 2 },
+  cavalry: { name: "Riders", role: "Raiders. Strike first and dive at Rangers, Artillery and Support; from a wing lane they slip past Guardians.", hp: 150, dmg: 17, range: 1.4, speed: 1.9, cooldown: 10, housing: 2, cost: 25, unlock: 3 },
+  siege: { name: "Siege", role: "Artillery. Bombard the biggest stack and splash its neighbours; deadly to clustered formations and bosses.", hp: 120, dmg: 38, range: 8, speed: 0.5, cooldown: 26, housing: 4, cost: 45, unlock: 4, splash: 1.6 },
+  support: { name: "Chaplains", role: "Heal the most wounded troops nearby and steady them. Fragile: keep them protected.", hp: 80, dmg: 4, range: 5, speed: 0.9, cooldown: 14, housing: 2, cost: 30, unlock: 2 },
 };
 export const UNIT_KEYS = Object.keys(UNITS);
+// ── Strategic combat (engine 2) ───────────────────────────────────────
+// Battles are fought between two 3x3 formations of unit stacks, in rounds, with integer math only,
+// so the same rules can run inside a Solana program. Slot i = row * 3 + lane; row 0 is the frontline.
+export const CLASSES = {
+  guardian: { name: "Guardians", role: "Hold the front. Absorb part of the damage aimed at allies behind them in their lane.", strong: ["raider"], weak: ["ranger", "artillery"] },
+  raider: { name: "Raiders", role: "Strike first and dive past the frontline to reach Rangers, Artillery and Support. From a wing lane they slip past half of the Guardians' protection.", strong: ["ranger", "artillery", "support"], weak: ["guardian"] },
+  ranger: { name: "Rangers", role: "Shoot from behind the line. Pierce Guardian armour and punish exposed troops.", strong: ["guardian"], weak: ["raider"] },
+  artillery: { name: "Artillery", role: "Bombard the biggest enemy stack and splash its neighbours. Punishes clustered formations.", strong: ["guardian"], weak: ["raider"] },
+  support: { name: "Support", role: "Heal the most wounded slot nearby and reduce damage to allies around them.", strong: [], weak: ["raider"] },
+};
+/** Each unit's class and its round-based stats (per unit: HP, damage per round, healing per round). */
+export const UNIT_CLASS = { infantry: "guardian", tank: "guardian", cavalry: "raider", archer: "ranger", siege: "artillery", support: "support" };
+export const COMBAT_STATS = {
+  infantry: { hp: 100, atk: 18, intercept: 1500 },
+  tank: { hp: 420, atk: 36, intercept: 3500 },
+  cavalry: { hp: 140, atk: 36 },
+  archer: { hp: 60, atk: 26 },
+  siege: { hp: 220, atk: 80, splash: 5000 },
+  support: { hp: 120, atk: 8, heal: 25 },
+  tower: { hp: 260, atk: 60 },
+};
+/** Damage multipliers by class, in basis points (10000 = no change). Bonuses only: never a sure win. */
+export const CLASS_COUNTERS = {
+  guardian: { raider: 20000 },
+  raider: { ranger: 15000, artillery: 18000, support: 15000, guardian: 7000 },
+  ranger: { guardian: 13500 },
+  artillery: {},
+  support: {},
+  tower: { raider: 12000 },
+  boss: {},
+};
+export const COMBAT = {
+  rounds: 16,
+  roll: [7000, 13000], // each hit is 70%..130% of its base
+  exposedBps: 2500, // mid/back slots with no living frontline ally in their lane take +25%
+  rangerExposedBps: 2000, // Rangers add +20% more against exposed targets
+  clusterBpsPer10: 1200, // Artillery: +12% per 10 units in the target stack...
+  clusterMaxBps: 6000, // ...up to +60%
+  auraBps: 1000, // Support: -10% damage taken for allies in their lane and the lanes beside it
+  bossCounterBps: 15000, // Siege and Shieldguards hit bosses harder
+};
+export const ORDERS = {
+  aggressive: { name: "Aggressive", desc: "+15% damage dealt, but +20% damage taken.", dmg: 1500, taken: 2000 },
+  defensive: { name: "Defensive", desc: "-20% damage taken, but -10% damage dealt.", dmg: -1000, taken: -2000 },
+  focus: { name: "Focus Fire", desc: "Every slot attacks the weakest enemy slot, +5% damage against it. Risks overkill and ignores class targeting.", focusBps: 500 },
+  hold: { name: "Hold Position", desc: "Guardians intercept 15% more and Rangers shoot before Raiders move, but Guardians and Raiders don't strike in the first round.", interceptBps: 1500 },
+  flank: { name: "Flank", desc: "Raiders always hunt exposed slots with +15% damage against them; everyone else deals -10%.", flankBps: 1500, othersBps: -1000 },
+};
+export const ORDER_KEYS = Object.keys(ORDERS);
+
+/**
+ * Formation presets. Each lists, per slot (front row first, lanes left/centre/right), which classes
+ * belong there in order of preference; auto-fill spreads the army's units over matching slots.
+ */
+export const PRESETS = {
+  shieldwall: { name: "Shield Wall", desc: "Guardians across the whole front, Rangers and Support safe behind. Hard to break, slow to kill.", order: "hold", slots: [["guardian"], ["guardian"], ["guardian"], ["raider", "support"], ["artillery", "support"], ["raider", "support"], ["ranger"], ["ranger", "artillery"], ["ranger"]] },
+  flanking: { name: "Flanking", desc: "Raiders on both wings dive at the enemy backline while a thin centre holds.", order: "flank", slots: [["raider"], ["guardian"], ["raider"], ["raider"], ["support", "guardian"], ["raider"], ["ranger"], ["artillery", "ranger"], ["ranger"]] },
+  ranged: { name: "Ranged", desc: "A deep backline of Rangers and Artillery behind a light screen. Deadly if the front holds.", order: "focus", slots: [["guardian"], ["guardian"], ["guardian"], ["ranger"], ["support"], ["ranger"], ["artillery", "ranger"], ["artillery", "ranger"], ["artillery", "ranger"]] },
+  assault: { name: "Assault", desc: "Everything stacked through the centre for one crushing push.", order: "aggressive", slots: [["raider", "guardian"], ["guardian"], ["raider", "guardian"], ["guardian", "raider"], ["raider"], ["guardian", "raider"], ["support"], ["artillery"], ["ranger"]] },
+};
+export const PRESET_KEYS = Object.keys(PRESETS);
+const HOME_ROW = { guardian: 0, raider: 1, support: 1, ranger: 2, artillery: 2 };
+const FILL_ORDER = ["tank", "infantry", "cavalry", "siege", "archer", "support"];
+
+/**
+ * Build a formation from an army and a preset: every unit placed, matching classes to slots.
+ * @param {Record<string, number>} army
+ * @param {string} [presetKey]
+ * @param {string | null} [order]
+ * @returns {{ slots: ({ unit: string, n: number } | null)[], order: string, preset: string, manual?: boolean }}
+ */
+export function autoFormation(army, presetKey = "shieldwall", order = null) {
+  const preset = PRESETS[presetKey] ?? PRESETS.shieldwall;
+  const slots = Array(9).fill(null);
+  const left = Object.fromEntries(UNIT_KEYS.map((k) => [k, Math.max(0, Math.floor(army?.[k] ?? 0))]));
+  // heavy Guardians claim the front before light ones; Artillery claims the back before Rangers
+  for (const k of FILL_ORDER) {
+    if (!left[k]) continue;
+    const cls = UNIT_CLASS[k];
+    // the free slots that want this class, best preference first
+    let want = [];
+    for (let rank = 0; rank < 3 && !want.length; rank++) want = preset.slots.map((c, i) => (c[rank] === cls && !slots[i] ? i : -1)).filter((i) => i >= 0);
+    // no preferred slot left: the free slots in the rows this class belongs in (front for Guardians,
+    // back for Rangers and Artillery), centre lane first
+    if (!want.length)
+      want = slots
+        .map((s, i) => (s ? -1 : i))
+        .filter((i) => i >= 0)
+        .sort((x, y) => Math.abs(Math.floor(x / 3) - HOME_ROW[cls]) - Math.abs(Math.floor(y / 3) - HOME_ROW[cls]) || Math.abs((x % 3) - 1) - Math.abs((y % 3) - 1) || x - y)
+        .slice(0, 1);
+    if (!want.length) {
+      // every slot is taken: join an existing stack of the same type
+      const same = slots.findIndex((s) => s && s.unit === k);
+      if (same >= 0) slots[same].n += left[k];
+      left[k] = 0;
+      continue;
+    }
+    const each = Math.floor(left[k] / want.length);
+    let extra = left[k] - each * want.length;
+    for (const i of want) {
+      const n = each + (extra > 0 ? 1 : 0);
+      if (extra > 0) extra--;
+      if (n > 0) slots[i] = { unit: k, n };
+    }
+    left[k] = 0;
+  }
+  return { slots, order: order ?? preset.order, preset: presetKey };
+}
+
+/** Check a formation against what the player owns. Returns a clean copy or throws a readable error. */
+export function validFormation(f, army) {
+  if (!f || !Array.isArray(f.slots) || f.slots.length !== 9) throw new Error("A formation has 9 slots.");
+  const used = {};
+  const slots = f.slots.map((s) => {
+    if (!s) return null;
+    const n = Math.floor(Number(s.n));
+    if (!UNITS[s.unit] || !(n > 0)) return null;
+    used[s.unit] = (used[s.unit] ?? 0) + n;
+    return { unit: s.unit, n };
+  });
+  for (const [k, n] of Object.entries(used)) if (n > (army?.[k] ?? 0)) throw new Error(`You placed ${n} ${UNITS[k].name} but have ${army?.[k] ?? 0}.`);
+  if (!slots.some(Boolean)) throw new Error("Place at least one unit.");
+  const order = ORDERS[f.order] ? f.order : "hold";
+  return { slots, order, preset: PRESETS[f.preset] ? f.preset : null };
+}
+/** The army a formation fields (unit -> count). */
+export const formationArmy = (f) => (f?.slots ?? []).reduce((a, s) => (s ? ((a[s.unit] = (a[s.unit] ?? 0) + s.n), a) : a), {});
 /** Damage multipliers: attacker → target. */
 export const COUNTERS = {
   infantry: { cavalry: 1.7 },
@@ -58,8 +186,8 @@ export const START = {
   gold: 500,
   crystals: 0,
   buildings: { keep: 1, barracks: 1, training: 1, vault: 1, towers: 1, trophy: 1 },
-  army: { infantry: 6, archer: 4, tank: 0, cavalry: 0, siege: 0 },
-  unitLevels: { infantry: 1, archer: 1, tank: 1, cavalry: 1, siege: 1 },
+  army: { infantry: 6, archer: 4, tank: 0, cavalry: 0, siege: 0, support: 0 },
+  unitLevels: { infantry: 1, archer: 1, tank: 1, cavalry: 1, siege: 1, support: 1 },
 };
 
 // ── Bounties ──────────────────────────────────────────────────────────
@@ -267,10 +395,10 @@ export const RELICS = {
   "gravel-crown": { name: "Crown of the Gravel King", desc: "+1 Watchtower when rivals attack you.", minTier: "rare", effect: { towers: 1 } },
   "ledger-scale": { name: "Ledger Scale", desc: "+5% Vault capacity.", minTier: "rare", effect: { vault: 0.05 } },
   "hashforge-ember": { name: "Hashforge Ember", desc: "+5% Siege damage.", minTier: "rare", effect: { dmg: { siege: 0.05 } } },
-  "rime-horn": { name: "Rimefang's Horn", desc: "+5% Cavalry damage.", minTier: "rare", effect: { dmg: { cavalry: 0.05 } } },
+  "rime-horn": { name: "Rimefang's Horn", desc: "+5% Rider damage.", minTier: "rare", effect: { dmg: { cavalry: 0.05 } } },
   "thorn-quiver": { name: "Thornwitch Quiver", desc: "+5% Archer damage.", minTier: "rare", effect: { dmg: { archer: 0.05 } } },
-  "arena-belt": { name: "Champion's Belt", desc: "+5% Infantry damage.", minTier: "epic", effect: { dmg: { infantry: 0.05 } } },
-  "dune-plate": { name: "Dune Titan Plate", desc: "+5% Tank damage.", minTier: "epic", effect: { dmg: { tank: 0.05 } } },
+  "arena-belt": { name: "Champion's Belt", desc: "+5% Spearman damage.", minTier: "epic", effect: { dmg: { infantry: 0.05 } } },
+  "dune-plate": { name: "Dune Titan Plate", desc: "+5% Shieldguard damage.", minTier: "epic", effect: { dmg: { tank: 0.05 } } },
   "regent-seal": { name: "Seal of the Hollow Regent", desc: "+10% Vault capacity.", minTier: "epic", effect: { vault: 0.1 } },
   "wyrm-heart": { name: "Wyrm Heart", desc: "+5% damage for every unit.", minTier: "legendary", effect: { dmg: { all: 0.05 } } },
   "colossus-core": { name: "Colossus Core", desc: "+2 Watchtowers when rivals attack you.", minTier: "legendary", effect: { towers: 2 } },

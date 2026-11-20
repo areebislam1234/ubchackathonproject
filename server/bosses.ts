@@ -2,9 +2,9 @@
 import crypto from "node:crypto";
 import { armyPower, simulate } from "../shared/battle.js";
 import { mulberry32 } from "../shared/rng.js";
-import { BOSSES, BOSS_TIERS, RELICS, UNIT_KEYS, bossArmy, rollLoot } from "../shared/rules.js";
+import { BOSSES, BOSS_TIERS, RELICS, autoFormation, bossArmy, formationArmy, rollLoot } from "../shared/rules.js";
 import { FOG_CELL, FOG_W, REALMS, SIGHT } from "../shared/world.js";
-import { lairs } from "./bounties";
+import { attackFormation, lairs } from "./bounties";
 import { db, feed, type BattleRecord, type Player } from "./db";
 import { GameError, award, boostsOf, earnDrills, exploredBytes, inventory, vigorOf } from "./players";
 import { grantReport } from "./intel/reports";
@@ -89,7 +89,10 @@ const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
  * arriving together can't both pass the cooldown check. Each request carries a client-made id:
  * a retried or duplicated request gets the stored result back instead of a second fight.
  */
-export function challenge(p: Player, id: string, units: Record<string, number>, requestId: unknown, opts: { forceIntel?: string | null } = {}) {
+/** How each kind of boss arranges its guards. */
+const BOSS_PRESET: Record<string, string> = { ogre: "assault", golem: "shieldwall", wyrm: "ranged", lich: "ranged", titan: "assault", yeti: "flanking" };
+
+export function challenge(p: Player, id: string, units: Record<string, number>, requestId: unknown, opts: { forceIntel?: string | null; plan?: { formation?: unknown; preset?: unknown; order?: unknown } } = {}) {
   const rid = typeof requestId === "string" && REQUEST_ID.test(requestId) ? requestId : null;
   if (!rid) throw new GameError("Missing request id.");
   p.bossClaims ??= {};
@@ -104,27 +107,24 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
   if (!p.pos || Math.hypot(p.pos.x - l.x, p.pos.y - l.y) > reachFor(boss.tier)) throw new GameError(`Walk up to ${boss.name}'s lair to challenge it.`);
   const readyAt = st.cooldowns[id] ?? 0;
   if (readyAt > now()) throw new GameError(`${boss.name} has retreated to lick its wounds. It returns in ${Math.ceil((readyAt - now()) / 60000)} min.`, 429);
-  const sent: Record<string, number> = {};
-  for (const k of UNIT_KEYS) {
-    const n = Math.max(0, Math.floor(Number(units?.[k] ?? 0) || 0));
-    if (n > (p.army[k] ?? 0)) throw new GameError(`You only have ${p.army[k] ?? 0} ${k}.`);
-    if (n) sent[k] = n;
-  }
-  if (!Object.keys(sent).length) throw new GameError("Send at least one unit.");
+  const formation = attackFormation(p, units, opts.plan ?? {});
+  const sent = formationArmy(formation);
 
   const army = bossArmy(l.boss);
+  const bossFormation = autoFormation(army.units, BOSS_PRESET[boss.look] ?? "shieldwall");
   const seed = crypto.randomBytes(4).readUInt32LE(0);
   const boosts = boostsOf(p);
   const vigor = vigorOf(p);
-  const result = simulate({ attacker: { units: sent, levels: p.unitLevels, boosts, vigor }, defender: army, seed });
+  const result = simulate({ engine: 2, attacker: { units: sent, levels: p.unitLevels, boosts, vigor, formation }, defender: { ...army, formation: bossFormation }, seed });
   const rec: BattleRecord = {
     id: `F-${++db.data.meta.battleSeq}`,
+    engine: 2,
     bounty: `lair:${id}`,
     boss: id,
     at: now(),
     seed,
-    attacker: { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, ...(boosts ? { boosts } : {}), ...(vigor ? { vigor } : {}) },
-    defender: { id: `boss:${id}`, name: boss.name, units: army.units, levels: army.levels, towers: army.towers, champions: army.champions },
+    attacker: { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, ...(boosts ? { boosts } : {}), ...(vigor ? { vigor } : {}), formation },
+    defender: { id: `boss:${id}`, name: boss.name, units: army.units, levels: army.levels, towers: army.towers, champions: army.champions, formation: bossFormation },
     result,
   };
   db.data.battles[rec.id] = rec;

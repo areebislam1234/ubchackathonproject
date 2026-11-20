@@ -1820,3 +1820,141 @@ label.field select {
 .fact b .chg {
   font-size: inherit;
 }
+/* combat report */
+.order-badge {
+  font: 400 15px var(--display);
+  padding: 0 6px;
+  border: 2px solid currentColor;
+  opacity: 0.85;
+}
+.report-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+.report-list li {
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--parch-d);
+  border-left: 4px solid var(--stone-d);
+  font-size: 14px;
+}
+.report-list li.good {
+  border-left-color: var(--green);
+}
+.report-list li.good span {
+  color: var(--green-d);
+}
+.report-list li.bad {
+  border-left-color: var(--red);
+}
+.report-list li.bad span {
+  color: var(--red-d);
+}
+
+/* formations */
+.fgrid-wrap {
+  display: grid;
+  grid-template-columns: minmax(250px, 340px) 1fr;
+  gap: 12px;
+  align-items: start;
+  margin: 8px 0;
+}
+.fgrid-wrap.compact {
+  grid-template-columns: minmax(220px, 300px) 1fr;
+}
+.fgrid {
+  display: grid;
+  gap: 4px;
+  background: #4f9a3a;
+  padding: 6px;
+  border: var(--px) solid var(--outline);
+}
+.fgrid-enemy {
+  text-align: center;
+  color: #fff3a6;
+  font: 400 15px var(--display);
+  letter-spacing: 2px;
+}
+.fgrid-row {
+  display: grid;
+  grid-template-columns: 38px repeat(3, 1fr);
+  gap: 4px;
+  align-items: stretch;
+}
+.fgrid-label {
+  align-self: center;
+  color: #fff;
+  font: 400 14px var(--display);
+}
+.fslot {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  min-height: 66px;
+  padding: 3px;
+  background: var(--parch-d);
+  border: var(--px) solid var(--parch-dd);
+  font: 400 13px var(--ui);
+  color: var(--ink);
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+.fslot b {
+  font: 400 16px var(--display);
+}
+.fslot span {
+  font-size: 11px;
+}
+.fslot.empty {
+  opacity: 0.55;
+  place-content: center;
+}
+.fslot.on {
+  outline: var(--px) solid var(--outline);
+  background: #fdf0c4;
+}
+.fslot:disabled {
+  cursor: default;
+}
+.fpanel h4 {
+  margin: 0 0 4px;
+}
+.fpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+.lane-notes {
+  margin: 6px 0;
+  padding-left: 16px;
+  font-size: 13px;
+  display: grid;
+  gap: 2px;
+}
+.class-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+.class-card {
+  padding: 6px 8px;
+  background: var(--parch-d);
+  border: var(--px) solid var(--parch-dd);
+  border-left-width: 8px;
+  font-size: 13px;
+}
+.class-card p {
+  margin: 3px 0 0;
+}
+@media (max-width: 620px) {
+  .fgrid-wrap,
+  .fgrid-wrap.compact {
+    grid-template-columns: 1fr;
+  }
+}

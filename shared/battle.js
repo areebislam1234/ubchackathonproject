@@ -3,6 +3,7 @@
 // Only + - * / and sqrt are used, so results match across JS engines.
 import { mulberry32 } from "./rng.js";
 import { COUNTERS, TOWER, UNITS, unitMult } from "./rules.js";
+import { simulate2 } from "./battle2.js";
 
 export const FIELD_W = 160;
 export const FIELD_H = 72;
@@ -58,7 +59,13 @@ function spawnChampions(champions, rnd) {
  * attacker / defender: { units: {infantry: n, ...}, levels: {infantry: lvl, ...}, towers?, champions?, boosts?, vigor? }
  * With record: true, also returns per-tick frames and events for the replay.
  */
-export function simulate({ attacker, defender, seed, record = false }) {
+export function simulate(args) {
+  // engine 2: formations and rounds (every new fight); engine 1: the original sim, kept so battles
+  // recorded before formations existed still replay exactly
+  return args.engine === 2 ? simulate2(args) : simulate1(args);
+}
+
+function simulate1({ attacker, defender, seed, record = false }) {
   const rnd = mulberry32(seed >>> 0);
   const units = [...spawn(0, attacker.units, attacker.levels, 0, rnd, attacker.boosts, attacker.vigor), ...spawn(1, defender.units, defender.levels, defender.towers ?? 0, rnd, defender.boosts, defender.vigor), ...spawnChampions(defender.champions, rnd)];
   units.forEach((u, i) => (u.id = i));
