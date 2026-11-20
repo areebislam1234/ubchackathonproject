@@ -30,7 +30,7 @@ const { generateWorld, REALMS, realmForMarket, WORLD_SEED, placeBossLairs } = aw
 const { mulberry32 } = await import("../shared/rng.js");
 const { parseScenario } = await import("../server/intel/scenario");
 const { simulate } = await import("../shared/battle.js");
-const { payoutFor, crystalsFor, brier, TIERS, BOSSES, BOSS_TIERS, rollLoot } = await import("../shared/rules.js");
+const { payoutFor, crystalsFor, brier, TIERS, BOSSES, BOSS_TIERS, rollLoot, ORDER_KEYS, PRESET_KEYS, autoFormation } = await import("../shared/rules.js");
 const { signStreamPayload } = await import("../shared/hmac");
 const { buildFilter, runFilter } = await import("../server/chain/filter");
 
@@ -136,7 +136,7 @@ try {
   const inCombat = await call(alice.token, "POST", "/api/recall", {});
   ok(inCombat.status === 400 && /combat/.test(inCombat.body.error), "you can't recall home right after a battle");
   const rec = atk.battle;
-  const replay = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts, vigor: rec.attacker.vigor }, defender: rec.defender, seed: rec.seed });
+  const replay = simulate({ engine: rec.engine, attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts, vigor: rec.attacker.vigor, formation: rec.attacker.formation }, defender: rec.defender, seed: rec.seed });
   ok(replay.score === rec.result.score && replay.winner === rec.result.winner && replay.ticks === rec.result.ticks, `the browser replay reproduces the server's battle exactly (${rec.result.winner}, +${rec.result.score})`);
   const me2 = (await call(alice.token, "GET", "/api/me")).body;
   ok(me2.army.infantry === 6 - (rec.result.lost.infantry ?? 0) && me2.army.archer === 4 - (rec.result.lost.archer ?? 0), "fallen units are removed from your army");
@@ -303,8 +303,8 @@ try {
   const bg0 = (await call(ct, "GET", "/api/me")).body.gold;
   const fightB = (await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-001", pos: near(common) })).body;
   ok(fightB.win === true && fightB.loot.drillsLanded === 1 && !("gold" in fightB.loot), "the starting army beats a common boss: 1 drill point, no gold");
-  const bossReplay = simulate({ attacker: { units: fightB.battle.attacker.units, levels: fightB.battle.attacker.levels, boosts: fightB.battle.attacker.boosts }, defender: fightB.battle.defender, seed: fightB.battle.seed, record: true });
-  ok(bossReplay.score === fightB.battle.result.score && (bossReplay as any).roster.some((u: any) => u.type === "boss"), "boss fights replay exactly in the browser, champion included");
+  const bossReplay: any = simulate({ engine: fightB.battle.engine, attacker: { units: fightB.battle.attacker.units, levels: fightB.battle.attacker.levels, boosts: fightB.battle.attacker.boosts, vigor: fightB.battle.attacker.vigor, formation: fightB.battle.attacker.formation }, defender: fightB.battle.defender, seed: fightB.battle.seed, record: true });
+  ok(bossReplay.score === fightB.battle.result.score && bossReplay.slots[1].some((u: any) => u.unit === "boss"), "boss fights replay exactly in the browser, champion included");
   const dupB = (await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-001", pos: near(common) })).body;
   const bg1 = (await call(ct, "GET", "/api/me")).body.gold;
   const pool1 = (await call(ct, "GET", "/api/me")).body.drills.pool;
@@ -342,8 +342,28 @@ try {
   const dr = (await call(ct, "POST", "/api/army/drill", { unit: "infantry", count: 40 })).body;
   ok(dr.drills.units.infantry === 30 && dr.drills.pool === 10, "drills cap at 30 points (+15%) per unit type");
   ok((await call(ct, "POST", "/api/army/drill", { unit: "infantry" })).status === 400, "a maxed unit can't take more drills");
-  const vigArgs = { attacker: { units: { infantry: 6 }, levels: { infantry: 1 }, vigor: { infantry: 0.15 }, boosts: { infantry: 0.15 } }, defender: { units: { archer: 4 }, levels: { archer: 1 } }, seed: 7 };
+  const vigArgs = { engine: 2, attacker: { units: { infantry: 6 }, levels: { infantry: 1 }, vigor: { infantry: 0.15 }, boosts: { infantry: 0.15 } }, defender: { units: { archer: 4 }, levels: { archer: 1 } }, seed: 7 };
   ok(JSON.stringify(simulate(vigArgs)) === JSON.stringify(simulate(vigArgs)), "fights with drill bonuses are deterministic, so replays match");
+
+  console.log("\nFormations and strategic combat");
+  let fm = (await call(ct, "GET", "/api/me")).body.formation;
+  ok(fm?.slots?.length === 9 && ORDER_KEYS.includes(fm.order), "every warlord has a 3x3 formation and a tactical order");
+  const badF = await call(ct, "POST", "/api/army/formation", { slots: [{ unit: "infantry", n: 999 }, null, null, null, null, null, null, null, null], order: "hold" });
+  ok(badF.status === 400, "a formation can't field more troops than you own");
+  fm = (await call(ct, "POST", "/api/army/formation", { preset: "flanking" })).body.formation;
+  ok(fm.preset === "flanking" && fm.order === "flank", "presets come with their own order");
+  const same = { units: { infantry: 6, tank: 3, archer: 6, cavalry: 3, support: 2 } };
+  const shareOf = (a: any, b: any) => {
+    let w = 0;
+    for (let i = 1; i <= 10; i++) if (simulate({ engine: 2, attacker: { formation: autoFormation(same.units, a.p, a.o), levels: {} }, defender: { formation: autoFormation(same.units, b.p, b.o), levels: {} }, seed: i * 31 }).winner === "attacker") w++;
+    return w;
+  };
+  const rates = PRESET_KEYS.flatMap((p) => ORDER_KEYS.map((o) => shareOf({ p, o }, { p: "shieldwall", o: "hold" })));
+  ok(Math.max(...rates) - Math.min(...rates) >= 4, "with identical armies, formation and order change who wins");
+  const report = simulate({ engine: 2, attacker: { formation: autoFormation(same.units, "assault"), levels: {} }, defender: { formation: autoFormation(same.units, "ranged"), levels: {} }, seed: 9 }) as any;
+  ok(report.report?.factors?.length > 0 && report.report.factors.every((f: any) => typeof f.text === "string" && (f.helped === "attacker" || f.helped === "defender")), "every battle explains the factors that decided it");
+  const legacy = simulate({ attacker: { units: { infantry: 6 }, levels: {} }, defender: { units: { archer: 4 }, levels: {}, towers: 1 }, seed: 5 }) as any;
+  ok(legacy.engine === undefined && typeof legacy.score === "number", "battles recorded before formations still replay with the original engine");
 
   console.log("\nThe yield economy");
   const dref = (await call(ct, "POST", "/api/funds/deposit", { usdc: 20 })).body;

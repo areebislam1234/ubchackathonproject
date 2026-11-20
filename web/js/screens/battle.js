@@ -7,6 +7,7 @@ import { RGB } from "/shared/sprites.js";
 import { sfx } from "../audio.js";
 import { spriteCanvas } from "../gfx.js";
 import { $, esc, fmt } from "../ui.js";
+import { openBattle2 } from "./battle2view.js";
 
 const W = 320;
 const H = 168;
@@ -19,6 +20,11 @@ const BOSS_BATTLE_SCALE = { common: 1.15, rare: 1.45, epic: 1.75, legendary: 2.1
 export const battleOpen = () => !$("battle").hidden;
 
 export function openBattle(G, rec, { loot = 0, onDone, doneLabel = "Back to the bounty", lootHtml = "" } = {}) {
+  // battles fought with formations replay in the formation view
+  if (rec.engine === 2) {
+    const extra = lootHtml || (loot ? `<p class="note">Looted ${loot} gold.</p>` : "");
+    return openBattle2(G, rec, { onDone, doneLabel, lootHtml: extra });
+  }
   const sim = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts, vigor: rec.attacker.vigor }, defender: rec.defender, seed: rec.seed, record: true });
   const el = $("battle");
   el.innerHTML = `

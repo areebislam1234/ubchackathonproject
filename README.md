@@ -25,6 +25,42 @@ Built for UBC 2026 from our design doc. Its three technologies each have a disti
 | ![World map](docs/map.png) | ![Bounty](docs/bounty.png) |
 | ![Battle](docs/battle.png) | ![The revealed question](docs/prediction.png) |
 
+## Strategic combat (formations, Army → Formation)
+
+Every battle is fought between two **3x3 formations**: front, mid and back rows across left, centre and right lanes. Each slot holds one stack of a unit type. Battles run in up to 16 rounds with integer-only math, so the same rules can later run inside a Solana program and give identical results. The browser replays the exact battle the server scored.
+
+| Class | Units | What it does |
+|---|---|---|
+| Guardians | Shieldguards (heavy), Spearmen (light) | Absorb 35% / 15% of the damage aimed at troops behind them in their lane; engage enemy Raiders first |
+| Raiders | Riders | Strike first and dive at Rangers, Artillery and Support; from a wing lane they slip past half the Guardians' protection |
+| Rangers | Archers | Shoot from behind the line; +35% against Guardians and extra damage to exposed troops |
+| Artillery | Siege | Hit the biggest enemy stack (+12% per 10 units in it) and splash the slots beside it |
+| Support | Chaplains (new, Barracks 2) | Heal the most wounded slot nearby and cut damage to allies around them by 10% |
+
+- **Position matters.** A mid/back slot whose lane has no living frontline is *exposed* and takes +25% damage.
+- **Counters are bonuses, never sure wins:** Guardians → Raiders, Raiders → Rangers/Artillery/Support, Rangers → Guardians. Siege and Shieldguards also hit bosses 50% harder.
+- **Orders** (one per battle, each with a cost):
+
+| Order | Effect | Cost |
+|---|---|---|
+| Aggressive | +15% damage | +20% damage taken |
+| Defensive | −20% damage taken | −10% damage |
+| Focus Fire | everyone hits the weakest enemy slot, +5% damage | ignores class targeting |
+| Hold Position | Guardians intercept +15%; Rangers shoot first | Guardians and Raiders skip round 1 |
+| Flank | Raiders hunt exposed slots, +15% against them | everyone else −10% |
+
+- **Presets:** Shield Wall, Flanking, Ranged and Assault. Each re-applies to your army as it changes; you can also place troops by hand. Your saved formation is also how you defend inside bounties. Attack prep (bounties and lairs) lets you pick a formation and order for that fight.
+- **Combat report:** every battle ends with the 3–5 factors that decided it, for example "Your Shieldguards absorbed 1,240 damage aimed at the troops behind them". Green factors helped you; red ones helped the enemy.
+- **Compatibility:**
+  - Camp guardians, rival warlords and boss escorts all fight in formations.
+  - Unit levels, Mastery, Drills and relics still scale HP and damage.
+  - Battles recorded before formations existed replay with the original engine.
+- **Balance:** `npx tsx scripts/balance.ts` plays every army type and preset against each other at equal size. It checks that:
+  - no army type dominates
+  - every army type has a counter
+  - the best formation depends on the army
+  - formation and order choices swing results for the same army
+
 ## The yield economy (Treasury, T)
 
 Troops grow strongest through **Mastery**, paid for with **Might**. Might comes only from real investment results. Everything runs on **devnet test USDC: no real money**.
@@ -131,7 +167,7 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
   - Inside a bounty sheet the same start, end and settle buttons appear.
   - The panel is on by default. Set `DEV_TOOLS=off` in `.env` before sharing the game publicly.
 - **Progress** is saved in `.data/local`. `npm run dev -- --fresh` starts over.
-- **Tests:** `npm test` runs 104 end-to-end checks on a separate stack, so it never touches your game.
+- **Tests:** `npm test` runs 110 end-to-end checks on a separate stack, so it never touches your game.
 
 ## 3-minute demo
 
@@ -242,7 +278,8 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | Command | Does |
 |---|---|
 | `npm run dev` | Runs everything for the current `NETWORK` (`-- --fresh` wipes local progress) |
-| `npm test` | 104 end-to-end checks on an isolated stack |
+| `npm test` | 110 end-to-end checks on an isolated stack |
+| `npx tsx scripts/balance.ts` | Combat balance check (army types, presets, orders) |
 | `npm run setup-solana` | Creates the authority and funds it if possible, then creates the badge mints |
 | `npm run print-filter` | Writes the QuickNode filter with your addresses filled in |
 | `npm run world-preview` | Renders the generated world to `docs/world-map.png` |
@@ -252,7 +289,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 
 | Folder | What's in it |
 |---|---|
-| `shared/` | World generator, pixel-art sprites, battle simulator and game rules. These are the same files in the browser and on the server. |
+| `shared/` | Formation battle engine (`battle2.js`), world generator, pixel-art sprites, battle simulator and game rules. These are the same files in the browser and on the server. |
 | `server/` | API, bounty director, players and economy, boss lairs and loot (`bosses.ts`), JSON database, Solana (`chain/solana.ts`), Stream handling (`chain/stream.ts`) |
 | `server/funds.ts`, `server/chain/usdc.ts` | The yield economy: ledger, trades, conversion, Mastery, USDC deposits and withdrawals |
 | `server/intel/` | Intelligence reports: market selection, scenario parsing, the data providers and report assembly |

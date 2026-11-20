@@ -5,6 +5,12 @@ import {
   BUILDINGS,
   DRILLS,
   MASTERY,
+  ORDERS,
+  PRESETS,
+  PRESET_KEYS,
+  autoFormation,
+  formationArmy,
+  validFormation,
   drillBonus,
   masteryBonus,
   masteryCost,
@@ -22,7 +28,7 @@ import {
   vaultCapWith,
 } from "../shared/rules.js";
 import { FOG_H, FOG_W } from "../shared/world.js";
-import { db, feed, type Drills, type Inventory, type Player } from "./db";
+import { db, feed, type Drills, type Formation, type Inventory, type Player } from "./db";
 
 /** After attacking you count as "in combat" this long: no recalling home. */
 export const COMBAT_MS = 30_000;
@@ -361,6 +367,58 @@ export function award(p: Player, badge: string) {
   for (const fn of badgeListeners) fn(p, badge);
 }
 
+// ── Formations ────────────────────────────────────────────────────────
+const hashOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+/**
+ * The formation a warlord fights with right now. A hand-placed formation is clamped to the troops
+ * they still own (casualties); a preset is re-applied to the current army. `override` comes from an
+ * attack: a full formation, or a preset and/or order for this fight only.
+ */
+export function fieldFormation(p: Player, override: { formation?: unknown; preset?: unknown; order?: unknown } = {}): Formation {
+  const order = typeof override.order === "string" && override.order in ORDERS ? override.order : null;
+  if (override.formation) {
+    try {
+      const f = validFormation(override.formation, p.army);
+      return order ? { ...f, order } : f;
+    } catch (e) {
+      throw new GameError((e as Error).message);
+    }
+  }
+  const saved = p.formation;
+  const preset = typeof override.preset === "string" && override.preset in PRESETS ? override.preset : null;
+  if (saved?.manual && !preset) {
+    const left: Record<string, number> = { ...p.army };
+    const slots = saved.slots.map((s) => {
+      if (!s) return null;
+      const n = Math.min(s.n, left[s.unit] ?? 0);
+      left[s.unit] = (left[s.unit] ?? 0) - n;
+      return n > 0 ? { unit: s.unit, n } : null;
+    });
+    if (slots.some(Boolean)) return { slots, order: order ?? saved.order, preset: null };
+  }
+  // bots without a formation each favour a preset, so rivals fight differently
+  const fallback = p.bot ? PRESET_KEYS[hashOf(p.id) % PRESET_KEYS.length] : "shieldwall";
+  return autoFormation(p.army, preset ?? (saved && !saved.manual ? saved.preset : null) ?? fallback, order ?? (saved?.manual ? null : saved?.order) ?? null);
+}
+
+/** Save a formation: a preset (re-applied as the army changes) or a hand-placed one. */
+export function setFormation(p: Player, body: any) {
+  if (body?.preset && !body?.slots) {
+    if (!(body.preset in PRESETS)) throw new GameError("Unknown formation.");
+    const order = body.order in ORDERS ? body.order : (PRESETS as any)[body.preset].order;
+    p.formation = { ...autoFormation(p.army, body.preset, order), manual: false };
+  } else {
+    try {
+      p.formation = { ...validFormation(body, p.army), manual: true };
+    } catch (e) {
+      throw new GameError((e as Error).message);
+    }
+  }
+  db.save();
+  return fieldFormation(p);
+}
+
 /** Everything the client needs about the signed-in player. */
 export function playerView(p: Player) {
   const cap = armyCapacity(p.buildings.barracks);
@@ -390,6 +448,12 @@ export function playerView(p: Player) {
     relicFx: relicFx(p),
     bossKills: Object.values(p.bosses?.kills ?? {}).reduce((s, n) => s + n, 0),
     intelCount: p.intel?.length ?? 0,
+    formation: (() => {
+      const f = fieldFormation(p);
+      const placed = formationArmy(f);
+      const unplaced = Object.fromEntries(UNIT_KEYS.map((k) => [k, Math.max(0, (p.army[k] ?? 0) - (placed[k] ?? 0))]).filter(([, n]) => (n as number) > 0));
+      return { ...f, manual: !!p.formation?.manual, unplaced };
+    })(),
     might: p.might ?? 0,
     usdc: p.funds?.cash ?? 0, // micro-USDC
     mastery: {
