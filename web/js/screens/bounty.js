@@ -166,6 +166,10 @@ function predictionBlock(G, d) {
         .map((c) => `<tr><td>${esc(c.name)}</td><td>${c.side.toUpperCase()}</td><td class="num">${pct(c.confBps)} sure</td><td class="num">${c.stake ? `${fmt(c.stake)} gold` : "free call"}</td></tr>`)
         .join("")}</tbody></table>`
     : "";
+  if (d.outcome === "void") {
+    const p = d.prediction;
+    return `${head}<p class="note">This market never settled on Gemini, so it was voided.${p?.stake ? ` Your stake of ${fmt(p.stake)} gold was refunded.` : ""}</p>${crowd}`;
+  }
   if (d.prediction) {
     const p = d.prediction;
     const settled = d.status === "resolved";

@@ -538,6 +538,29 @@ function resolve(b: Bounty, outcome: "yes" | "no") {
   db.save();
 }
 
+const DAY_MS = 86_400_000;
+/** A revealed bounty whose market should have settled long ago (and still hasn't on Gemini). */
+function isStale(b: Bounty) {
+  const expiry = b.expiry ? Date.parse(b.expiry) : NaN;
+  if (Number.isFinite(expiry)) return now() - expiry > 3 * DAY_MS;
+  return now() - (b.results?.finalizedAt ?? b.createdAt) > 30 * DAY_MS;
+}
+
+/** Close a bounty whose market never settled: every stake goes back, no Crystals. */
+function voidStale(b: Bounty) {
+  b.outcome = "void";
+  b.status = "resolved";
+  b.resolvedAt = now();
+  for (const pr of Object.values(b.predictions)) {
+    pr.payout = pr.stake;
+    pr.crystals = 0;
+    const p = db.data.players[pr.playerId];
+    if (p && !p.bot && pr.stake) addGold(p, pr.stake);
+  }
+  feed({ kind: "settle", text: `${b.id}'s market never settled on Gemini, so it was voided and stakes were refunded`, bounty: b.id });
+  db.save();
+}
+
 // ── Rival warlords (bots) ─────────────────────────────────────────────
 function bots(): Player[] {
   const list = Object.values(db.data.players).filter((p) => p.bot);
@@ -670,6 +693,8 @@ async function checkSettlements() {
     }
   }
   lookupCursor += DIRECT_LOOKUPS_PER_PASS;
+  // markets that should have settled long ago: void them so finished bounties don't pile up forever
+  for (const b of revealed) if (b.status === "revealed" && isStale(b)) voidStale(b);
 }
 
 /** One failure (a bad bounty, a Gemini outage) must never stop the loop or new bounties. */

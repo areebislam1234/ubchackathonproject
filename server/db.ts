@@ -157,7 +157,8 @@ export type Bounty = {
   };
   quote?: { bidBps: number | null; askBps: number | null; at: number };
   revealQuote?: { bidBps: number | null; askBps: number | null };
-  outcome?: "yes" | "no";
+  /** "void": the market never settled on Gemini, so stakes were refunded */
+  outcome?: "yes" | "no" | "void";
   resolvedAt?: number;
   wildcard?: boolean; // Gemini had no market in this realm's category
   hot?: boolean; // spawned because its market moved sharply
