@@ -370,7 +370,16 @@ export const botStyle = (bot: { id: string }) => (strSeed(bot.id) % 2 ? "momentu
 let lastSettle = 0;
 let busy = false;
 export async function colosseumTick(force = false) {
-  for (const d of Object.values(duels())) if (d.status === "open" && d.botAt && now() >= d.botAt) botAccept(d);
+  for (const d of Object.values(duels())) if (d.status === "open" && d.botAt && now() >= d.botAt) {
+      try {
+        botAccept(d);
+      } catch (e) {
+        // a rival that can't field its army must not take the whole server down; retry later
+        console.error("colosseum: bot accept failed:", e instanceof Error ? e.message : e);
+        d.botAt = now() + COLOSSEUM.botAcceptSec * 1000;
+        db.save();
+      }
+    }
   const every = env.geminiMode === "mock" ? 4000 : 30000;
   if ((!force && now() - lastSettle < every) || busy) return;
   busy = true;
