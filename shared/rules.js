@@ -261,6 +261,9 @@ function weighted(rnd, weights) {
  * Roll a boss's loot. Pure: the same rnd sequence always gives the same loot.
  * `owned` relics are skipped so a relic drop is always something new (gold instead if all are owned).
  * `forceIntel` (dev tools) guarantees an intel drop of that rarity.
+ * @param {string} tier
+ * @param {() => number} rnd
+ * @param {{ owned?: Record<string, unknown>, forceIntel?: string | null }} [opts]
  */
 export function rollLoot(tier, rnd, { owned = {}, forceIntel = null } = {}) {
   const t = BOSS_TIERS[tier];

@@ -2,7 +2,7 @@
 // fight you watch is exactly the fight that scored.
 import { FIELD_H, FIELD_W, simulate } from "/shared/battle.js";
 import { noise2, rand2 } from "/shared/rng.js";
-import { UNITS } from "/shared/rules.js";
+import { BOSSES, UNITS } from "/shared/rules.js";
 import { RGB } from "/shared/sprites.js";
 import { sfx } from "../audio.js";
 import { spriteCanvas } from "../gfx.js";
@@ -14,9 +14,11 @@ const TOP = 22;
 const SX = W / FIELD_W;
 const SY = (H - TOP - 4) / FIELD_H;
 let running = null;
+// How large each boss tier is drawn on the battlefield (regular units are 16px).
+const BOSS_BATTLE_SCALE = { common: 1.15, rare: 1.45, epic: 1.75, legendary: 2.1 };
 export const battleOpen = () => !$("battle").hidden;
 
-export function openBattle(G, rec, { loot = 0, onDone } = {}) {
+export function openBattle(G, rec, { loot = 0, onDone, doneLabel = "Back to the bounty", lootHtml = "" } = {}) {
   const sim = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels }, defender: rec.defender, seed: rec.seed, record: true });
   const el = $("battle");
   el.innerHTML = `
@@ -27,7 +29,19 @@ export function openBattle(G, rec, { loot = 0, onDone } = {}) {
   const canvas = $("battle-canvas");
   const ctx = canvas.getContext("2d");
   const bg = background(rec.seed);
-  const st = { t: 0, speed: 2, done: false, lastTick: -1, deadAt: new Map(), shots: [], booms: [], swingAt: new Map() };
+  const st = { t: 0, speed: 2, done: false, lastTick: -1, deadAt: new Map(), shots: [], booms: [], swingAt: new Map(), holdUntil: 0 };
+  // Legendary bosses get a moment to announce themselves before the fight starts.
+  const champ = rec.defender.champions?.[0];
+  const bossDef = champ ? BOSSES[champ.look] : null;
+  if (bossDef?.tier === "legendary") {
+    st.holdUntil = performance.now() + 1900;
+    const card = document.createElement("div");
+    card.className = "boss-intro";
+    card.innerHTML = `<span>${esc(bossDef.name)}</span><b>awakens</b>`;
+    el.append(card);
+    sfx("rumble");
+    setTimeout(() => card.remove(), 1900);
+  }
   running = st;
   for (const b of el.querySelectorAll("[data-speed]")) b.onclick = () => (st.speed = Number(b.dataset.speed));
   $("b-skip").onclick = () => (st.t = sim.frames.length - 1);
@@ -42,7 +56,7 @@ export function openBattle(G, rec, { loot = 0, onDone } = {}) {
     if (running !== st) return;
     const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
     last = now;
-    if (!st.done) st.t = Math.min(sim.frames.length - 1, st.t + dt * 10 * st.speed);
+    if (!st.done && now >= st.holdUntil) st.t = Math.min(sim.frames.length - 1, st.t + dt * 10 * st.speed);
     const tick = Math.max(0, Math.floor(st.t));
     for (let k = st.lastTick + 1; k <= tick; k++)
       for (const e of evByTick.get(k) ?? []) {
@@ -50,7 +64,7 @@ export function openBattle(G, rec, { loot = 0, onDone } = {}) {
         if (e.k === "swing") st.swingAt.set(e.id, k);
         if (e.k === "shoot") (st.shots.push(e), st.swingAt.set(e.id, k));
         if (e.k === "boom") st.booms.push(e);
-        const s = e.k === "shoot" ? (e.type === "siege" ? "boom" : "shoot") : e.k;
+        const s = e.k === "shoot" ? (e.type === "siege" || e.type === "boss" ? "boom" : "shoot") : e.k;
         if (tick - k < 3 && now - (sounds[s] ?? 0) > 90) {
           sounds[s] = now;
           sfx(s === "shoot" ? "arrow" : s === "boom" ? "boom" : s === "die" ? "die" : "swing");
@@ -60,7 +74,7 @@ export function openBattle(G, rec, { loot = 0, onDone } = {}) {
     draw(ctx, bg, sim, st, tick);
     if (!st.done && tick >= sim.frames.length - 1) {
       st.done = true;
-      setTimeout(() => showResult(G, rec, loot, onDone), 500);
+      setTimeout(() => showResult(G, rec, loot, onDone, doneLabel, lootHtml), 500);
     }
     requestAnimationFrame(frame);
   };
@@ -86,12 +100,20 @@ function draw(ctx, bg, sim, st, tick) {
   });
   hpBar(ctx, 6, 6, 120, tot[0] / max[0], "#3e74d6");
   hpBar(ctx, W - 126, 6, 120, tot[1] / max[1], "#e23c3c");
+  sim.roster.forEach((u, i) => {
+    if (u.type !== "boss") return;
+    hpBar(ctx, W / 2 - 50, 15, 100, f[i * 3 + 2], "#f6c33b", 3);
+  });
   // bodies (y-sorted)
   const order = sim.roster.map((u, i) => i).sort((a, b) => f[a * 3 + 1] - f[b * 3 + 1]);
   for (const i of order) {
     const u = sim.roster[i];
     const [x, y] = pos(i);
     const dead = st.deadAt.get(i);
+    if (u.type === "boss") {
+      drawBoss(ctx, u, i, x, y, f, st, tick);
+      continue;
+    }
     if (f[i * 3 + 2] <= 0) {
       if (dead !== undefined && tick - dead < 12) {
         ctx.fillStyle = `rgba(243,234,219,${1 - (tick - dead) / 12})`;
@@ -125,7 +147,14 @@ function draw(ctx, bg, sim, st, tick) {
     const arc = s.type === "siege" ? -18 * 4 * p * (1 - p) : -4 * 4 * p * (1 - p);
     const x = x0 + (x1 - x0) * p;
     const y = y0 - 8 + (y1 - y0) * p + arc;
-    if (s.type === "siege") {
+    if (s.type === "boss") {
+      ctx.fillStyle = "#1b1626";
+      ctx.fillRect(Math.round(x - 3), Math.round(y - 3), 6, 6);
+      ctx.fillStyle = tick % 2 ? "#f07c4f" : "#e23c3c";
+      ctx.fillRect(Math.round(x - 2), Math.round(y - 2), 4, 4);
+      ctx.fillStyle = "#f6c33b";
+      ctx.fillRect(Math.round(x - 1), Math.round(y - 1), 2, 2);
+    } else if (s.type === "siege") {
       ctx.fillStyle = "#1b1626";
       ctx.fillRect(Math.round(x - 2), Math.round(y - 2), 4, 4);
       ctx.fillStyle = "#a3a3b3";
@@ -150,6 +179,29 @@ function draw(ctx, bg, sim, st, tick) {
     }
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+function drawBoss(ctx, u, i, x, y, f, st, tick) {
+  const def = BOSSES[u.look];
+  const sc = BOSS_BATTLE_SCALE[def?.tier] ?? 1.2;
+  const swing = st.swingAt.get(i);
+  const hit = swing !== undefined && tick - swing < 4 ? 1 : 0;
+  const spr = spriteCanvas(`boss_${u.look}_${hit}`);
+  const w = Math.round(spr.width * sc);
+  const h = Math.round(spr.height * sc);
+  const hp = f[i * 3 + 2];
+  if (hp <= 0) {
+    const dead = st.deadAt.get(i);
+    if (dead !== undefined && tick - dead < 20) {
+      ctx.globalAlpha = 1 - (tick - dead) / 20;
+      ctx.drawImage(spr, Math.round(x - w / 2), Math.round(y - h + 1 + (tick - dead)), w, h);
+      ctx.globalAlpha = 1;
+    }
+    return;
+  }
+  ctx.fillStyle = "rgba(20,30,20,0.35)";
+  ctx.fillRect(Math.round(x - w * 0.35), Math.round(y - 2), Math.round(w * 0.7), 3);
+  ctx.drawImage(spr, Math.round(x - w / 2), Math.round(y - h + 1), w, h);
 }
 
 function hpBar(ctx, x, y, w, frac, color, h = 5) {
@@ -187,7 +239,7 @@ function background(seed) {
   return c;
 }
 
-function showResult(G, rec, loot, onDone) {
+function showResult(G, rec, loot, onDone, doneLabel = "Back to the bounty", lootHtml = "") {
   const r = rec.result;
   const win = r.winner === "attacker";
   sfx(win ? "victory" : "defeat");
@@ -204,8 +256,9 @@ function showResult(G, rec, loot, onDone) {
       <div class="fact"><b>${r.survival}%</b><span>Survived</span></div>
       <div class="fact"><b>+${fmt(r.score)}</b><span>Score</span></div>
     </div>
-    <p class="note">${Math.round(r.destruction * 10)} for damage${win ? " + 300 win bonus" : ""} + ${Math.round(r.survival * 2)} for survivors${loot ? ` · looted ${loot} gold` : ""}.<br>${lost ? `Fallen: ${esc(lost)}.` : "No losses."}</p>
-    <button class="btn btn-gold btn-big" id="b-done">Back to the bounty</button>`;
+    ${lootHtml || `<p class="note">${Math.round(r.destruction * 10)} for damage${win ? " + 300 win bonus" : ""} + ${Math.round(r.survival * 2)} for survivors${loot ? ` · looted ${loot} gold` : ""}.</p>`}
+    <p class="note">${lost ? `Fallen: ${esc(lost)}.` : "No losses."}</p>
+    <button class="btn btn-gold btn-big" id="b-done">${esc(doneLabel)}</button>`;
   $("battle").append(card);
   $("b-done").onclick = () => {
     running = null;

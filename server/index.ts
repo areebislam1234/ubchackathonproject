@@ -10,7 +10,7 @@ import { db, type Player } from "./db";
 import { GameError, bySession, disband, logout, markExplored, onBadge, playerView, register, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, tick, world } from "./bounties";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
-import { discoverLairs, lairView, lairsFor } from "./bosses";
+import { challenge, discoverLairs, lairView, lairsFor } from "./bosses";
 import { badgeMints, chainStatus, claimAll, holdingsFor, linkWallet, loadAuthority, mintBadge, sealResults, unlinkWallet, verifyWalletSignature, walletChallenge } from "./chain/solana";
 import { applyEvents, extractEvents } from "./chain/stream";
 import { encodePng } from "./png";
@@ -146,6 +146,17 @@ app.get(
     const id = String(req.params.id);
     if (!req.player.bosses?.discovered.includes(id)) throw new GameError("You haven't found that lair yet.", 404);
     return lairView(req.player, id);
+  }),
+);
+
+app.post(
+  "/api/bosses/:id/challenge",
+  auth,
+  wrap((req) => {
+    // the hero's position, reported the same way /api/explore reports it
+    const pos = req.body?.pos;
+    if (pos && Number.isInteger(pos.x) && Number.isInteger(pos.y)) req.player.pos = { x: pos.x, y: pos.y };
+    return challenge(req.player, String(req.params.id), req.body?.units ?? {}, req.body?.requestId);
   }),
 );
 
