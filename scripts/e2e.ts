@@ -56,7 +56,7 @@ async function rpc(method: string, params: unknown[] = []) {
 
 console.log("starting a fresh stack…");
 const ready = path.join(DATA, "ready");
-const dev = spawn(path.join(ROOT, "node_modules", ".bin", "tsx"), ["scripts/dev.ts", "--fresh"], { cwd: ROOT, env: { ...process.env, DEV_READY_FILE: ready }, stdio: ["ignore", "pipe", "pipe"] });
+const dev = spawn(process.execPath, [path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/dev.ts", "--fresh"], { cwd: ROOT, env: { ...process.env, DEV_READY_FILE: ready }, stdio: ["ignore", "pipe", "pipe"] });
 const log: string[] = [];
 dev.stdout.on("data", (d) => log.push(d.toString()));
 dev.stderr.on("data", (d) => log.push(d.toString()));

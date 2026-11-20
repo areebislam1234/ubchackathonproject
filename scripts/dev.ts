@@ -10,12 +10,13 @@ import { IS_LOCAL, NETWORK, ROOT, env, networkDataDir, solanaRpcUrl } from "../s
 
 const children: ChildProcess[] = [];
 const COLORS = [36, 35, 33, 32, 34, 31];
-const TSX = path.join(ROOT, "node_modules", ".bin", "tsx");
+// Run tsx through node directly so this also works on Windows, where .bin/tsx is a shell shim.
+const TSX_CLI = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 let stopping = false;
 
 function run(name: string, script: string, quiet = false): ChildProcess {
   const tag = `\x1b[${COLORS[children.length % COLORS.length]}m${name.padEnd(7)}\x1b[0m`;
-  const child = spawn(TSX, [script], { cwd: ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [TSX_CLI, script], { cwd: ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   children.push(child);
   const pipe = (s: NodeJS.ReadableStream) =>
     s.on("data", (d: Buffer) => {

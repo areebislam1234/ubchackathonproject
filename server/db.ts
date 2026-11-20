@@ -155,7 +155,13 @@ class Database {
     if (this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.flush();
+      try {
+        this.flush();
+      } catch (err) {
+        // Windows: OneDrive/antivirus can briefly lock db.json; don't crash, try again shortly
+        console.warn(`db save failed (${(err as NodeJS.ErrnoException).code ?? err}), retrying`);
+        this.save();
+      }
     }, 400);
   }
 
@@ -168,7 +174,21 @@ class Database {
     if (battles.length > 2000) for (const b of battles.sort((a, c) => a.at - c.at).slice(0, battles.length - 2000)) delete d.battles[b.id];
     const tmp = this.file + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(d));
-    fs.renameSync(tmp, this.file);
+    renameWithRetry(tmp, this.file);
+  }
+}
+
+// On Windows, rename over a file another process has open (OneDrive sync, antivirus,
+// the editor) fails with EPERM/EBUSY/EACCES for a short while. Retry briefly.
+function renameWithRetry(from: string, to: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return fs.renameSync(from, to);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (attempt >= 10 || !(code === "EPERM" || code === "EBUSY" || code === "EACCES")) throw err;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (attempt + 1));
+    }
   }
 }
 
