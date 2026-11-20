@@ -3,8 +3,16 @@
 import { BADGES } from "../../shared/rules.js";
 import { db, feed, type ChainEvent, type NetworkSample } from "../db";
 import { badgeMints, MEMO_PREFIX } from "./solana";
+import { confirmWithdrawal, creditDeposit } from "../funds";
 
-export type StreamEvent = { signature: string; slot: number; blockTime: number | null; memos: string[]; badges: { mint: string; owner: string; pre: number; post: number }[] };
+export type StreamEvent = {
+  signature: string;
+  slot: number;
+  blockTime: number | null;
+  memos: string[];
+  badges: { mint: string; owner: string; pre: number; post: number }[];
+  deposits?: { from: string | null; amount: number; keys: string[] }[]; // USDC into the game, in base units (micro-USDC)
+};
 
 /** Accepts the filter's output: { events: [...] }, a batch array of those, or a bare event list. */
 export function extractEvents(body: unknown): StreamEvent[] {
@@ -57,7 +65,9 @@ export function applyEvents(events: StreamEvent[]) {
   for (const e of events) {
     if (chain.processed[e.signature]) continue; // duplicate or redelivery
     chain.processed[e.signature] = Date.now();
-    const rec: ChainEvent = { ...e, receivedAt: Date.now() };
+    const rec: ChainEvent = { signature: e.signature, slot: e.slot, blockTime: e.blockTime, memos: e.memos, badges: e.badges, receivedAt: Date.now() };
+    // USDC deposits: credited once, here, after the webhook's signature check and this dedupe
+    for (const d of e.deposits ?? []) if (d.amount > 0 && Number.isInteger(d.amount)) creditDeposit({ signature: e.signature, from: d.from ?? "", usdc: d.amount, refs: Array.isArray(d.keys) ? d.keys.map(String) : [] });
     chain.events.push(rec);
     applied++;
     for (const m of e.memos) {
@@ -72,6 +82,8 @@ export function applyEvents(events: StreamEvent[]) {
           st.signature = e.signature;
           feed({ kind: "chain", text: `Solana: ${p.name}'s ${(BADGES as any)[badge]?.name ?? badge} badge confirmed (slot ${e.slot})`, signature: e.signature, player: p.id });
         }
+      } else if (parts[2] === "withdraw") {
+        confirmWithdrawal(e.signature);
       } else if (parts[2] === "result") {
         const [bountyId, hash] = [parts[3], parts[4]];
         const b = db.data.bounties[bountyId];

@@ -4,7 +4,10 @@ import {
   BADGES,
   BUILDINGS,
   DRILLS,
+  MASTERY,
   drillBonus,
+  masteryBonus,
+  masteryCost,
   MATERIAL_KEYS,
   START,
   UNITS,
@@ -223,7 +226,13 @@ export function assignDrill(p: Player, unit: string, count = 1) {
   db.save();
   return { unit, points: d.units[unit], pool: d.pool };
 }
-const drillMap = (p: Player) => Object.fromEntries(Object.entries(p.drills?.units ?? {}).filter(([, n]) => n > 0).map(([k, n]) => [k, drillBonus(n)]));
+/** Drills (from bosses) + Mastery (from yield): the same bonus applies to HP and damage. */
+const drillMap = (p: Player) => {
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(p.drills?.units ?? {})) if (n > 0) out[k] = drillBonus(n);
+  for (const [k, r] of Object.entries(p.mastery ?? {})) if (r > 0) out[k] = (out[k] ?? 0) + masteryBonus(r);
+  return out;
+};
 
 /** Damage bonuses for the battle simulator (relics + drills), or undefined when there are none. */
 export function boostsOf(p: Player) {
@@ -381,6 +390,14 @@ export function playerView(p: Player) {
     relicFx: relicFx(p),
     bossKills: Object.values(p.bosses?.kills ?? {}).reduce((s, n) => s + n, 0),
     intelCount: p.intel?.length ?? 0,
+    might: p.might ?? 0,
+    usdc: p.funds?.cash ?? 0, // micro-USDC
+    mastery: {
+      ranks: p.mastery ?? {},
+      perRank: MASTERY.perRank,
+      maxRank: MASTERY.maxRank,
+      next: Object.fromEntries(UNIT_KEYS.map((k) => [k, (p.mastery?.[k] ?? 0) < MASTERY.maxRank ? masteryCost((p.mastery?.[k] ?? 0) + 1) : null])),
+    },
     drills: (() => {
       const d = drills(p);
       return { units: d.units, pool: d.pool, todayLeft: DRILLS.dailyCap - d.today, perPoint: DRILLS.perPoint, maxPerUnit: DRILLS.maxPerUnit, dailyCap: DRILLS.dailyCap };

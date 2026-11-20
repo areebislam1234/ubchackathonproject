@@ -5,6 +5,7 @@
 import { BADGE_IDS } from "../shared/rules.js";
 import { IS_LOCAL, NETWORK, solanaRpcUrl } from "../server/config";
 import { airdrop, balanceSol, ensureBadgeMints, loadAuthority } from "../server/chain/solana";
+import { depositTarget, ensureLocalUsdc, treasuryBalance } from "../server/chain/usdc";
 
 async function main() {
   const auth = await loadAuthority({ create: true });
@@ -28,6 +29,11 @@ async function main() {
   console.log(`badge mints (${BADGE_IDS.length})`);
   const mints = await ensureBadgeMints();
   for (const id of BADGE_IDS) console.log(`  ${id.padEnd(13)} ${mints[id]}`);
+  if (IS_LOCAL) await ensureLocalUsdc();
+  const dep = await depositTarget();
+  if (dep) console.log(`USDC        mint ${dep.mint}
+            deposits → ${dep.account} (owner ${dep.owner}), game balance ${await treasuryBalance()} USDC`);
+  if (!IS_LOCAL) console.log(`            Withdrawals draw on the game's USDC: send it some test USDC from https://faucet.circle.com (Solana devnet).`);
   if (!IS_LOCAL) console.log(`\nNext: npm run print-filter, then create the QuickNode Stream (see README).`);
 }
 main().catch((e) => {

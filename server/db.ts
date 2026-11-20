@@ -41,6 +41,34 @@ export type Player = {
   inventory?: Inventory;
   intel?: IntelReport[]; // collected intelligence reports, kept forever
   drills?: Drills;
+  // The yield economy (all money in integer micro-USDC). Optional: created on first use.
+  funds?: Funds;
+  might?: number; // upgrade currency, from converted realized yield
+  mastery?: Record<string, number>; // Mastery rank per unit type
+  fundClaims?: Record<string, { at: number; response: unknown }>; // money requestId → result (idempotency)
+};
+
+export type LedgerEntry = {
+  at: number;
+  kind: "deposit" | "buy" | "sell" | "convert" | "withdraw" | "withdraw-refund" | "dev-credit";
+  usdc: number; // micro-USDC moved (positive = into cash)
+  coin?: string;
+  qty?: number;
+  price?: number; // USD per coin at the fill
+  realized?: number; // micro-USDC realized by a sale
+  might?: number;
+  signature?: string;
+  status?: "pending" | "sent" | "confirmed" | "failed";
+  error?: string;
+};
+
+export type Funds = {
+  cash: number; // uninvested USDC in the game
+  principal: number; // net deposited: deposits minus withdrawals
+  positions: Record<string, { qty: number; cost: number }>; // cost basis in micro-USDC
+  realized: number; // lifetime realized profit and loss (can be negative)
+  converted: number; // realized profit already converted into Might
+  ledger: LedgerEntry[];
 };
 
 /** Minor army upgrades earned from bosses. */
@@ -147,6 +175,10 @@ export type DBShape = {
   players: Record<string, Player>;
   sessions: Record<string, string>;
   sessionSeen?: Record<string, number>; // token → last use, for idle expiry
+  deposits?: {
+    refs: Record<string, { player: string; at: number }>; // Solana Pay reference key → player
+    unclaimed: { signature: string; from: string; usdc: number; at: number }[]; // deposits no player could be matched to
+  };
   usernames: Record<string, string>; // lower-case name → player id
   emails?: Record<string, string>; // legacy
   bounties: Record<string, Bounty>;

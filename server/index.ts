@@ -12,6 +12,10 @@ import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devSt
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
 import { challenge, devNextIntel, discoverLairs, lairView, lairsFor } from "./bosses";
 import { intelList, reportView, resumeCompiling } from "./intel/reports";
+import { buy, buyMastery, convert, devCredit, fundsView, newDepositReference, quotes, sell, setWithdrawSender, withdraw } from "./funds";
+import { depositTarget, sendUsdc, solanaPayUrl, treasuryBalance } from "./chain/usdc";
+
+setWithdrawSender(sendUsdc);
 import { badgeMints, chainStatus, claimAll, holdingsFor, linkWallet, loadAuthority, mintBadge, sealResults, unlinkWallet, verifyWalletSignature, walletChallenge } from "./chain/solana";
 import { applyEvents, applyNetwork, extractEvents, extractNetwork } from "./chain/stream";
 import { encodePng } from "./png";
@@ -176,6 +180,26 @@ app.get(
   }),
 );
 
+// ── Treasury: deposits, investing, yield → Might ──────────────────────
+app.get("/api/funds", auth, wrap(async (req) => ({ ...fundsView(req.player, await quotes()), testMoney: true, network: NETWORK })));
+app.get("/api/funds/quotes", auth, wrap(async () => ({ quotes: await quotes() })));
+app.post("/api/funds/buy", auth, wrap((req) => buy(req.player, req.body?.coin, req.body?.usdc, req.body?.requestId)));
+app.post("/api/funds/sell", auth, wrap((req) => sell(req.player, req.body?.coin, req.body?.qty, req.body?.requestId)));
+app.post("/api/funds/convert", auth, wrap((req) => convert(req.player, req.body?.usdc, req.body?.requestId)));
+app.post("/api/funds/withdraw", auth, wrap((req) => withdraw(req.player, req.body?.usdc, req.body?.requestId)));
+app.post(
+  "/api/funds/deposit",
+  auth,
+  wrap(async (req) => {
+    const t = await depositTarget();
+    if (!t) throw new GameError("Deposits aren't set up on this server yet (run npm run setup-solana).", 503);
+    const reference = newDepositReference(req.player);
+    const amount = Number(req.body?.usdc) > 0 ? Number(req.body.usdc) : null;
+    return { recipient: t.owner, account: t.account, mint: t.mint, reference, url: solanaPayUrl(t.owner, t.mint, amount, reference), linkedWallet: req.player.wallet?.address ?? null };
+  }),
+);
+app.post("/api/army/mastery", auth, wrap((req) => (buyMastery(req.player, String(req.body?.unit)), playerView(req.player))));
+
 // ── Fortress and army ─────────────────────────────────────────────────
 app.post("/api/fortress/upgrade", auth, wrap((req) => upgradeBuilding(req.player, String(req.body?.building), { useMaterials: req.body?.useMaterials === true })));
 app.post("/api/army/train", auth, wrap((req) => train(req.player, String(req.body?.unit), Number(req.body?.count ?? 1))));
@@ -275,6 +299,19 @@ app.post(
     return { next: r || null };
   }),
 );
+app.post(
+  "/api/dev/usdc",
+  devOnly,
+  auth,
+  wrap((req) => {
+    const usdc = Math.max(0, Math.min(100000, Number(req.body?.usdc) || 0));
+    if (usdc) devCredit(req.player, usdc);
+    if (req.body?.might !== undefined) req.player.might = Math.max(0, Math.min(1e7, Math.floor(Number(req.body.might) || 0)));
+    db.save();
+    return fundsView(req.player);
+  }),
+);
+app.get("/api/dev/deposits", devOnly, auth, wrap(async () => ({ unclaimed: db.data.deposits?.unclaimed ?? [], target: await depositTarget(), treasury: await treasuryBalance().catch(() => null) })));
 app.post(
   "/api/dev/boss-cooldowns",
   devOnly,

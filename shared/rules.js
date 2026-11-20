@@ -226,7 +226,22 @@ export function bossArmy(key) {
 //   Mastery (major): bought with the upgrade currency that realized investment yield converts into.
 //   Drills (minor): earned by defeating bosses. Capped at a quarter of Mastery, so fighting bosses
 //   is always worth it but can never replace investing.
-export const MASTERY = { perRank: 0.03, maxRank: 20 }; // +3% HP and damage per rank, up to +60%
+export const MASTERY = { perRank: 0.03, maxRank: 20, baseCost: 25, costGrowth: 1.18 }; // +3% HP and damage per rank, up to +60%
+/** Might to go from rank r-1 to rank r. */
+export const masteryCost = (rank) => Math.round(MASTERY.baseCost * MASTERY.costGrowth ** (rank - 1));
+/** HP / damage bonus fraction from Mastery ranks on one unit type. */
+export const masteryBonus = (rank) => Math.min(MASTERY.maxRank, Math.max(0, rank ?? 0)) * MASTERY.perRank;
+
+// ── The yield economy ─────────────────────────────────────────────────
+// Players deposit USDC, invest it in coins at real market prices, and convert realized gains (never
+// principal) into Might, which buys Mastery. All amounts on the server are integer micro-USDC.
+export const ECONOMY = {
+  mightPerUsdc: 100, // Might for each 1 USDC of realized yield converted
+  coins: ["BTC", "ETH", "SOL", "XRP", "DOGE", "HYPE"],
+  minTradeUsdc: 1,
+  feeBps: 0, // trade fee in basis points
+  minWithdrawUsdc: 1,
+};
 export const DRILLS = {
   perPoint: 0.005, // +0.5% HP and damage per point on one unit type
   maxPerUnit: 30, // up to +15% per unit type
@@ -342,6 +357,8 @@ export const BADGES = {
   "giant-killer": { name: "Giant Killer", desc: "Defeat a Legendary boss.", icon: "sword" },
   "relic-hunter": { name: "Relic Hunter", desc: "Own 3 relics.", icon: "chest" },
   spymaster: { name: "Spymaster", desc: "Collect 10 intelligence reports.", icon: "scroll" },
+  "first-profit": { name: "First Profit", desc: "Realize a gain on an investment.", icon: "coin" },
+  "master-at-arms": { name: "Master-at-Arms", desc: "Raise a unit type to Mastery rank 20.", icon: "helmet" },
 };
 export const BADGE_IDS = Object.keys(BADGES);
 

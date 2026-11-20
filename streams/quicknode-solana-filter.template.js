@@ -18,6 +18,7 @@ var AUTHORITY = "__AUTHORITY__";
 var MINTS = __MINTS__;
 var MEMO_RE = /Memo \(len \d+\): "(.*)"$/;
 var WATCH_MINTS = __WATCH_MINTS__; // token mints whose transfers are counted in network samples
+var DEPOSIT_MINT = "__DEPOSIT_MINT__"; // USDC: transfers into the authority's account are deposits
 var NETWORK_EVERY = __NETWORK_EVERY__; // sample one block in this many slots
 var VOTE_PROGRAM = "Vote111111111111111111111111111111111111111";
 
@@ -105,7 +106,32 @@ function main(stream) {
       var badgeChanges = Object.keys(changes).map(function (k) {
         return changes[k];
       });
-      if (!involved && !badgeChanges.length) continue;
+      // USDC deposits: the authority's USDC goes up; the sender is the owner whose USDC went down
+      var deposits = [];
+      if (DEPOSIT_MINT) {
+        var usdc = {};
+        var pairs = [["pre", meta.preTokenBalances || []], ["post", meta.postTokenBalances || []]];
+        for (var u = 0; u < pairs.length; u++)
+          for (var v = 0; v < pairs[u][1].length; v++) {
+            var tb = pairs[u][1][v];
+            if (tb.mint !== DEPOSIT_MINT || !tb.owner) continue;
+            if (!usdc[tb.owner]) usdc[tb.owner] = { pre: 0, post: 0 };
+            usdc[tb.owner][pairs[u][0]] += Number(tb.uiTokenAmount && tb.uiTokenAmount.amount) || 0;
+          }
+        var into = usdc[AUTHORITY] ? usdc[AUTHORITY].post - usdc[AUTHORITY].pre : 0;
+        if (into > 0) {
+          var from = null;
+          var drop = 0;
+          for (var o in usdc)
+            if (o !== AUTHORITY && usdc[o].pre - usdc[o].post > drop) {
+              drop = usdc[o].pre - usdc[o].post;
+              from = o;
+            }
+          // the transaction's accounts, so a Solana Pay reference key can match the deposit to a player
+          deposits.push({ from: from, amount: into, keys: keys.slice(0, 16) });
+        }
+      }
+      if (!involved && !badgeChanges.length && !deposits.length) continue;
       // Memo text shows up as `Memo (len N): "text"`, as its own log line, or (jsonParsed) as a
       // parsed spl-memo instruction, depending on the memo program version and encoding.
       var memos = [];
@@ -120,8 +146,10 @@ function main(stream) {
       }
       var ixs = msg.instructions || [];
       for (var x = 0; x < ixs.length; x++) if (ixs[x] && ixs[x].program === "spl-memo") addMemo(ixs[x].parsed);
-      if (!memos.length && !badgeChanges.length) continue;
-      events.push({ signature: tx.transaction.signatures[0], slot: slot, blockTime: block.blockTime || null, memos: memos, badges: badgeChanges });
+      if (!memos.length && !badgeChanges.length && !deposits.length) continue;
+      var ev = { signature: tx.transaction.signatures[0], slot: slot, blockTime: block.blockTime || null, memos: memos, badges: badgeChanges };
+      if (deposits.length) ev.deposits = deposits;
+      events.push(ev);
     }
   }
   if (!events.length && !network.length) return null;

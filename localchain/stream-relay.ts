@@ -9,6 +9,7 @@ import { signStreamPayload } from "../shared/hmac";
 import { IS_LOCAL, env, gameUrl, networkDataDir, solanaRpcUrl } from "../server/config";
 import { NETWORK_EVERY, buildFilter, runFilter } from "../server/chain/filter";
 import { badgeMints, loadAuthority } from "../server/chain/solana";
+import { depositTarget } from "../server/chain/usdc";
 
 const STATE = path.join(networkDataDir, "relay.json");
 const state: { lastSlot: number; lastSigs: Record<string, string>; lastSample?: number } = fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE, "utf8")) : { lastSlot: 0, lastSigs: {} };
@@ -41,7 +42,9 @@ async function filter() {
     filterSrc = buildFilter(auth.address, mints);
     filterKey = key;
   }
-  return { auth: auth.address, mints };
+  // the game's USDC account too, so deposits show up without a Stream
+  const dep = await depositTarget().catch(() => null);
+  return { auth: auth.address, mints: dep ? [...mints, dep.account] : mints };
 }
 
 async function pollLocal() {
