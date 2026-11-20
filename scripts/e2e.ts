@@ -510,6 +510,54 @@ try {
   ok(board.board.some((r: any) => r.name === "Cara" && r.duels === 2) && board.mine.length >= 3, "duels count in the rankings and in My duels");
   }
 
+  console.log("\nThe SOL vault");
+  {
+    const eve = (await call(null, "POST", "/api/register", { name: "Eve", password: "eve-secret-555" })).body;
+    ok((await call(eve.token, "POST", "/api/vault/deposit/prepare", { sol: 1 })).status === 400, "depositing SOL needs a wallet you can sign with");
+    const kp = crypto.generateKeyPairSync("ed25519");
+    const { getAddressDecoder } = await import("@solana/kit");
+    const addr = getAddressDecoder().decode(Buffer.from(kp.publicKey.export({ format: "jwk" }).x!, "base64url"));
+    const chv = (await call(eve.token, "POST", "/api/wallet/challenge", { address: addr })).body;
+    await call(eve.token, "POST", "/api/wallet/link", { address: addr, signature: crypto.sign(null, Buffer.from(chv.message), kp.privateKey).toString("base64"), kind: "ingame" });
+    const drop = await call(eve.token, "POST", "/api/vault/airdrop", {});
+    const lamportsOf = async (a: string) => Number((await rpc("getBalance", [a]))?.value ?? 0);
+    ok(drop.status === 200 && (await lamportsOf(addr)) >= 2e9, "the local faucet gives a wallet 2 SOL");
+    await call(eve.token, "POST", "/api/dev/sol-price", { usd: 100 });
+    // a wallet signs the transaction the game prepared (here: the in-game wallet's key)
+    const signTx = (b64: string) => {
+      const bytes = Buffer.from(b64, "base64");
+      const message = bytes.subarray(1 + 64 * bytes[0]);
+      crypto.sign(null, message, kp.privateKey).copy(bytes, 1);
+      return bytes.toString("base64");
+    };
+    const prep = (await call(eve.token, "POST", "/api/vault/deposit/prepare", { sol: 1.5 })).body;
+    ok(prep.lamports === 1.5e9 && prep.from === addr && typeof prep.tx === "string", "the game prepares a 1.5 SOL transfer for the wallet to sign");
+    const other = (await call(eve.token, "POST", "/api/vault/deposit/prepare", { sol: 0.5 })).body;
+    ok((await call(eve.token, "POST", "/api/vault/deposit/submit", { nonce: prep.nonce, tx: signTx(other.tx) })).status === 400, "a signed transaction that isn't the prepared deposit is refused");
+    const dep = await call(eve.token, "POST", "/api/vault/deposit/submit", { nonce: prep.nonce, tx: signTx(prep.tx) });
+    ok(dep.status === 200 && dep.body.lamports === 1.5e9 && dep.body.hwmUsd === 150e6 && dep.body.mightEarned === 0, "the deposit lands on-chain and is credited: 1.5 SOL worth $150, no Might for depositing");
+    ok((await lamportsOf(addr)) < 0.6e9 && (await lamportsOf(dep.body.vault)) >= 1.5e9, "the SOL really moved from the wallet to the game's vault");
+    ok((await call(eve.token, "POST", "/api/vault/deposit/submit", { nonce: prep.nonce, tx: signTx(prep.tx) })).status === 400, "the same deposit can't be credited twice");
+    await call(eve.token, "POST", "/api/dev/sol-price", { usd: 110 });
+    let v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
+    ok(v.mightEarned === 1500 && v.might === 1500, "SOL rises from $100 to $110: $15 of growth becomes 1,500 Might automatically");
+    await call(eve.token, "POST", "/api/dev/sol-price", { usd: 104 });
+    v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
+    await call(eve.token, "POST", "/api/dev/sol-price", { usd: 110 });
+    v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
+    ok(v.mightEarned === 1500, "a dip and recovery pays nothing twice (high-water mark)");
+    await call(eve.token, "POST", "/api/dev/sol-price", { usd: 112 });
+    v = (await call(eve.token, "POST", "/api/dev/vault-tick", {})).body;
+    ok(v.mightEarned === 1800 && Math.abs(v.highWaterPrice - 112) < 0.01, "a new high pays only the growth above the old one (+300 Might at $112)");
+    const before = await lamportsOf(addr);
+    const w = await call(eve.token, "POST", "/api/vault/withdraw", { sol: 0.5, requestId: crypto.randomUUID().replace(/-/g, "") });
+    ok(w.status === 200 && w.body.lamports === 1e9 && Math.abs(w.body.hwmUsd - 112e6) < 2 && (await lamportsOf(addr)) - before === 0.5e9, "withdrawing 0.5 SOL sends it back to the wallet and shrinks the high-water mark in proportion");
+    ok((await call(eve.token, "POST", "/api/vault/withdraw", { sol: 5, requestId: crypto.randomUUID().replace(/-/g, "") })).status === 400, "you can't withdraw more than your vault holds");
+    const me = (await call(eve.token, "GET", "/api/me")).body;
+    ok(me.vault.lamports === 1e9 && me.might === 1800, "the HUD sees the vault and the Might");
+    await call(eve.token, "POST", "/api/dev/sol-price", { live: true });
+  }
+
   console.log("\nBadge metadata");
   const meta = await (await fetch(`${gameUrl}/meta/oracle.json`)).json();
   const png = await fetch(`${gameUrl}/meta/oracle.png`);

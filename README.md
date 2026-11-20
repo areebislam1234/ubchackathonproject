@@ -61,6 +61,12 @@ Every battle is fought between two **3x3 formations**: front, mid and back rows 
   - the best formation depends on the army
   - formation and order choices swing results for the same army
 
+## The SOL vault (T)
+
+Bring your own crypto into the game. **Vault → Deposit** builds a transfer from your linked wallet to the game's vault (with a memo naming the deposit); Phantom, MetaMask or any Wallet Standard wallet asks you to approve it, or the in-game wallet signs it right there. The game checks the transaction on-chain before it counts, once per signature.
+
+Your SOL stays SOL: nothing is sold or swapped. Every 10 seconds the vault is valued at **Gemini's live SOL/USD price**, and whenever its value reaches a **new high**, the growth above the old high becomes **Might** automatically (100 Might per $1). A dip and recovery never pays twice, deposits never count as growth, and withdrawals shrink the high-water mark in proportion. **Withdraw** sends SOL back to your verified wallet. Dev → Arena & odds has demo price buttons (SOL ±5%) for showing growth live.
+
 ## The yield economy (Treasury, T)
 
 Troops grow strongest through **Mastery**, paid for with **Might**. Might comes only from real investment results. Everything runs on **devnet test USDC: no real money**.
@@ -218,7 +224,7 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
   - Inside a bounty sheet the same start, end and settle buttons appear.
   - The panel is on by default. Set `DEV_TOOLS=off` in `.env` before sharing the game publicly.
 - **Progress** is saved in `.data/local`. `npm run dev -- --fresh` starts over.
-- **Tests:** `npm test` runs 139 end-to-end checks on a separate stack, so it never touches your game.
+- **Tests:** `npm test` runs 152 end-to-end checks on a separate stack, so it never touches your game.
 
 ## 3-minute demo
 
@@ -333,7 +339,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | Command | Does |
 |---|---|
 | `npm run dev` | Runs everything for the current `NETWORK` (`-- --fresh` wipes local progress) |
-| `npm test` | 139 end-to-end checks on an isolated stack |
+| `npm test` | 152 end-to-end checks on an isolated stack |
 | `npx tsx scripts/balance.ts` | Combat balance check (army types, presets, orders) |
 | `npm run setup-solana` | Creates the authority and funds it if possible, then creates the badge mints |
 | `npm run print-filter` | Writes the QuickNode filter with your addresses filled in |

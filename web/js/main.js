@@ -16,7 +16,7 @@ import { openDev } from "./screens/dev.js";
 import { openLair, refreshLairSheet } from "./screens/lair.js";
 import { openInventory, unseenCount } from "./screens/inventory.js";
 import { openIntel } from "./screens/intel.js";
-import { openTreasury } from "./screens/treasury.js";
+import { openVault } from "./screens/vault.js";
 import { openColosseum } from "./screens/colosseum.js";
 import { openOdds } from "./screens/odds.js";
 import { crierShout, initCrier } from "./crier.js";
@@ -39,6 +39,8 @@ export const G = {
   openLair: (id) => openLair(G, id),
   openIntel: (id) => openIntel(G, id),
   openColosseum: (opts) => openColosseum(G, opts),
+  openProfile: () => openProfile(G),
+  openVault: () => openVault(G),
   openOdds: (market) => openOdds(G, market),
   travelTo,
   setCourse,
@@ -206,7 +208,8 @@ function renderHud() {
   $("gold-val").textContent = fmt(m.gold);
   $("gold-fill").style.width = `${Math.min(100, (m.gold / m.derived.vaultCap) * 100)}%`;
   $("crystal-val").textContent = fmt(m.crystals);
-  $("usdc-val").textContent = `$${((m.usdc ?? 0) / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  $("usdc-val").textContent = `◎${((m.vault?.lamports ?? 0) / 1e9).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  $("res-usdc").title = m.vault?.valueUsd != null ? `SOL in your vault: worth $${(m.vault.valueUsd / 1e6).toFixed(2)}. Growth turns into Might.` : "SOL in your vault";
   $("might-val").textContent = fmt(m.might ?? 0);
   G.view.setAttuned(m.attuned);
   G.view.setHome(m.home, m.buildings.keep);
@@ -505,9 +508,9 @@ $("btn-fortress").addEventListener("click", () => openFortress(G));
 $("btn-army").addEventListener("click", () => openArmy(G));
 $("btn-bag").addEventListener("click", () => openInventory(G));
 $("btn-intel").addEventListener("click", () => openIntel(G));
-$("btn-bank").addEventListener("click", () => openTreasury(G));
-$("res-usdc").addEventListener("click", () => openTreasury(G, "overview"));
-$("res-might").addEventListener("click", () => openTreasury(G, "overview"));
+$("btn-bank").addEventListener("click", () => openVault(G));
+$("res-usdc").addEventListener("click", () => openVault(G));
+$("res-might").addEventListener("click", () => openVault(G));
 $("btn-profile").addEventListener("click", () => openProfile(G));
 $("btn-arena").addEventListener("click", () => openColosseum(G));
 $("btn-odds").addEventListener("click", () => openOdds(G));
@@ -539,7 +542,7 @@ addEventListener("keydown", (e) => {
   if (k === "r") openArmy(G);
   if (k === "b") openInventory(G);
   if (k === "i") openIntel(G);
-  if (k === "t") openTreasury(G);
+  if (k === "t") openVault(G);
   if (k === "p") openProfile(G);
   if (k === "k") openColosseum(G);
   if (k === "o") openOdds(G);
