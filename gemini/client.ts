@@ -104,6 +104,7 @@ function unwrapList(j: any): GeminiEvent[] {
 
 export class GeminiClient {
   private cache: { at: number; events: GeminiEvent[] } | null = null;
+  private settledCache: { at: number; events: GeminiEvent[] } | null = null;
 
   constructor(readonly baseUrl: string = geminiBaseUrl) {}
 
@@ -113,7 +114,8 @@ export class GeminiClient {
       if (v === undefined) continue;
       for (const item of Array.isArray(v) ? v : [v]) url.searchParams.append(k, String(item));
     }
-    const res = await fetch(url, { headers: { accept: "application/json" } });
+    // a hung request must never stall the game loop
+    const res = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new Error(`Gemini ${res.status} ${res.statusText} for ${url.pathname}${url.search}`);
     return res.json();
   }
@@ -134,21 +136,45 @@ export class GeminiClient {
     return j?.data && !Array.isArray(j.data) ? j.data : j;
   }
 
-  async recentlySettled(limit = 100): Promise<GeminiEvent[]> {
-    return unwrapList(await this.get("/v1/prediction-markets/events/recently-settled", { limit }));
+  /**
+   * Recently settled events, cached so checking many bounties costs one API call. If a refresh
+   * fails (rate limit, outage) the last good list is used.
+   */
+  async recentlySettled(limit = 100, maxAgeMs = 30_000): Promise<GeminiEvent[]> {
+    const c = this.settledCache;
+    if (c && Date.now() - c.at < maxAgeMs) return c.events;
+    try {
+      const events = unwrapList(await this.get("/v1/prediction-markets/events/recently-settled", { limit }));
+      this.settledCache = { at: Date.now(), events };
+      return events;
+    } catch (e) {
+      if (!c) throw e;
+      console.error("gemini (using cached settled list):", (e as Error).message);
+      return c.events;
+    }
   }
 
-  /** Forget the cached event list (after a dev action changes the mock market). */
+  /** Forget the cached event lists (after a dev action changes the mock market). */
   clearCache() {
     this.cache = null;
+    this.settledCache = null;
   }
 
-  /** Active events, cached for a few seconds so a burst of requests costs one API call. */
+  /**
+   * Active events, cached for a few seconds so a burst of requests costs one API call. If a refresh
+   * fails (rate limit, outage) the last good list is used, so bounties keep spawning.
+   */
   async activeEvents(maxAgeMs = 5000): Promise<GeminiEvent[]> {
     if (this.cache && Date.now() - this.cache.at < maxAgeMs) return this.cache.events;
-    const events = await this.listEvents({ status: ["active"] });
-    this.cache = { at: Date.now(), events };
-    return events;
+    try {
+      const events = await this.listEvents({ status: ["active"] });
+      this.cache = { at: Date.now(), events };
+      return events;
+    } catch (e) {
+      if (!this.cache) throw e;
+      console.error("gemini (using cached market list):", (e as Error).message);
+      return this.cache.events;
+    }
   }
 
   /** Find the event + contract for a market (instrumentSymbol). */

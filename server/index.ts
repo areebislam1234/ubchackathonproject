@@ -434,6 +434,7 @@ app.post(
     const side = req.body?.side === "no" ? "no" : "yes";
     const r = await fetch(`${geminiBaseUrl}/mock/settle`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ market: b.market, side }) });
     if (!r.ok) throw new GameError("Mock Gemini refused to settle.");
+    gemini.clearCache();
     await tick();
     return { ok: true };
   }),

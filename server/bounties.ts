@@ -146,9 +146,15 @@ function questionText(m: MarketSummary) {
   return label;
 }
 
-/** Everything that blocks a new camp: live bounties and players' fortresses. */
+/**
+ * Everything that blocks a new camp: live bounties (and ones that just ended), players' fortresses
+ * and boss lairs. Finished bounties waiting on Gemini can wait for weeks; counting them filled every
+ * realm until no new camp could spawn.
+ */
 function takenSpots() {
-  const spots = visibleBounties().map((b) => ({ x: b.x, y: b.y }));
+  const t = now();
+  const blocking = Object.values(db.data.bounties).filter((b) => b.status === "upcoming" || b.status === "active" || t - (b.results?.finalizedAt ?? b.resolvedAt ?? 0) < RECENT_MS);
+  const spots = blocking.map((b) => ({ x: b.x, y: b.y }));
   for (const p of Object.values(db.data.players)) if (p.home) spots.push(p.home);
   for (const l of lairs) spots.push({ x: l.x, y: l.y });
   return spots;
@@ -625,14 +631,53 @@ async function refreshQuotes() {
   }
 }
 
+/** Markets checked one by one per pass when they're in neither list (rotates through the rest). */
+const DIRECT_LOOKUPS_PER_PASS = 5;
+let lookupCursor = 0;
+const sideOf = (c: any): "yes" | "no" | null => (c?.resolutionSide === "yes" || c?.resolutionSide === "no" ? c.resolutionSide : null);
+
+/**
+ * Settle revealed bounties. Two list calls per pass cover almost every market (asking Gemini once
+ * per bounty floods it as revealed bounties pile up, and a rate limit then stops new bounties).
+ */
 async function checkSettlements() {
-  for (const b of Object.values(db.data.bounties).filter((x) => x.status === "revealed")) {
+  const revealed = Object.values(db.data.bounties).filter((x) => x.status === "revealed");
+  if (!revealed.length) return;
+  const known = new Map<string, "yes" | "no" | null>();
+  try {
+    for (const e of await gemini.recentlySettled(100, env.geminiMode === "mock" ? 3000 : 30_000)) for (const c of e.contracts ?? []) known.set(c.instrumentSymbol, sideOf(c));
+    for (const e of await gemini.activeEvents(15_000)) for (const c of e.contracts ?? []) if (!known.get(c.instrumentSymbol)) known.set(c.instrumentSymbol, sideOf(c));
+  } catch (e) {
+    console.error("gemini settlement:", (e as Error).message);
+    return;
+  }
+  const missing: Bounty[] = [];
+  for (const b of revealed) {
+    if (!known.has(b.market)) missing.push(b);
+    else {
+      const side = known.get(b.market);
+      if (side) resolve(b, side);
+    }
+  }
+  // markets in neither list (closed but not yet in recently-settled): look a few up directly
+  for (let k = 0; k < Math.min(DIRECT_LOOKUPS_PER_PASS, missing.length); k++) {
+    const b = missing[(lookupCursor + k) % missing.length];
     try {
       const side = await gemini.settlement(b.market);
       if (side) resolve(b, side);
     } catch (e) {
       console.error("gemini settlement:", (e as Error).message);
     }
+  }
+  lookupCursor += DIRECT_LOOKUPS_PER_PASS;
+}
+
+/** One failure (a bad bounty, a Gemini outage) must never stop the loop or new bounties. */
+async function guarded(what: string, fn: () => unknown) {
+  try {
+    await fn();
+  } catch (e) {
+    console.error(`bounty loop (${what}):`, (e as Error).message);
   }
 }
 
@@ -643,28 +688,32 @@ export async function tick() {
   ticking = true;
   try {
     if (!booted) {
-      bots();
-      await spawnBounties(true);
-      booted = true;
+      await guarded("boot", async () => {
+        bots();
+        await spawnBounties(true);
+        booted = true;
+      });
     }
     for (const b of Object.values(db.data.bounties)) {
-      if (b.status === "upcoming" && now() >= b.startsAt) {
-        b.status = "active";
-        db.save();
-      }
-      if (b.status === "upcoming" || b.status === "active") runBots(b);
-      if (b.status === "active" && now() >= b.endsAt) finalize(b);
+      await guarded(b.id, () => {
+        if (b.status === "upcoming" && now() >= b.startsAt) {
+          b.status = "active";
+          db.save();
+        }
+        if (b.status === "upcoming" || b.status === "active") runBots(b);
+        if (b.status === "active" && now() >= b.endsAt) finalize(b);
+      });
     }
-    await spawnBounties();
+    await guarded("spawn", () => spawnBounties());
     const quoteEvery = env.geminiMode === "mock" ? 3000 : 15000;
     if (now() - lastQuote > quoteEvery) {
       lastQuote = now();
-      await refreshQuotes();
+      await guarded("quotes", refreshQuotes);
     }
     const settleEvery = env.geminiMode === "mock" ? 4000 : 30000;
     if (now() - lastSettle > settleEvery) {
       lastSettle = now();
-      await checkSettlements();
+      await guarded("settlements", checkSettlements);
     }
   } finally {
     ticking = false;
