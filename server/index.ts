@@ -7,7 +7,7 @@ import { PALETTE, SPRITES } from "../shared/sprites.js";
 import { verifyStreamSignature } from "../shared/hmac";
 import { IS_LOCAL, NETWORK, ROOT, env, explorerAddress, explorerTx, geminiBaseUrl } from "./config";
 import { db, type Player } from "./db";
-import { GameError, bySession, disband, logout, markExplored, onBadge, playerView, register, sendHome, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
+import { GameError, assignDrill, bySession, disband, logout, markExplored, onBadge, playerView, register, sendHome, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, tick, world } from "./bounties";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
 import { challenge, devNextIntel, discoverLairs, lairView, lairsFor } from "./bosses";
@@ -179,6 +179,7 @@ app.get(
 // ── Fortress and army ─────────────────────────────────────────────────
 app.post("/api/fortress/upgrade", auth, wrap((req) => upgradeBuilding(req.player, String(req.body?.building), { useMaterials: req.body?.useMaterials === true })));
 app.post("/api/army/train", auth, wrap((req) => train(req.player, String(req.body?.unit), Number(req.body?.count ?? 1))));
+app.post("/api/army/drill", auth, wrap((req) => (assignDrill(req.player, String(req.body?.unit), Number(req.body?.count ?? 1)), playerView(req.player))));
 app.post("/api/army/disband", auth, wrap((req) => disband(req.player, String(req.body?.unit), Number(req.body?.count ?? 1))));
 app.post("/api/army/upgrade", auth, wrap((req) => upgradeUnit(req.player, String(req.body?.unit), { use: req.body?.use === "manual" || req.body?.use === "scroll" ? req.body.use : undefined })));
 

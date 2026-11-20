@@ -54,7 +54,8 @@ export function openInventory(G) {
     "bag",
     `
     <h2>Bag</h2>
-    <p class="sub">Spoils from boss lairs. Materials cut building costs, manuals and scrolls level up units for free, and relics give permanent bonuses.</p>
+    <p class="sub">Boss spoils. Bosses now drop drill points (minor army upgrades), relics and intelligence. Materials, manuals and scrolls you already earned still work.</p>
+    <div class="coach">${icon("helmet", 2)} <b>${m.drills?.pool ?? 0}</b> drill point${(m.drills?.pool ?? 0) === 1 ? "" : "s"} to assign. Spend them on a unit in the Army screen (R).</div>
     <h3>Materials <span class="note">${fmt(totalMats)} · each saves ${MATERIAL_GOLD_VALUE} gold on an upgrade (up to ${Math.round(MATERIAL_MAX_SHARE * 100)}%)</span></h3>
     <div class="bag-grid">${mats}</div>
     <h3>Training manuals</h3>

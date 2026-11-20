@@ -1,6 +1,6 @@
 // Army management: train, disband and level up units.
 import { armyPower } from "/shared/battle.js";
-import { COUNTERS, UNITS, UNIT_KEYS, unitMult } from "/shared/rules.js";
+import { COUNTERS, DRILLS, UNITS, UNIT_KEYS, drillBonus, unitMult } from "/shared/rules.js";
 import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
@@ -17,6 +17,13 @@ const weakTo = (k) =>
     .map(([a]) => UNITS[a].name)
     .join(", ");
 
+function drillRow(m, k) {
+  const pts = m.drills?.units?.[k] ?? 0;
+  const pool = m.drills?.pool ?? 0;
+  const full = pts >= DRILLS.maxPerUnit;
+  return `<div class="row"><span class="stats">Drills ${pts}/${DRILLS.maxPerUnit} · +${Math.round(drillBonus(pts) * 1000) / 10}%</span>${pool > 0 && !full ? `<button class="btn btn-gold btn-small" data-act="drill:${k}:1">+1 drill</button>${pool >= 5 && pts + 5 <= DRILLS.maxPerUnit ? `<button class="btn btn-gold btn-small" data-act="drill:${k}:5">+5</button>` : ""}` : ""}</div>`;
+}
+
 export function openArmy(G) {
   const m = G.me;
   const d = m.derived;
@@ -27,6 +34,7 @@ export function openArmy(G) {
     <p class="sub">Your army fights your attacks and, frozen at the moment you enter, defends you inside each bounty. Units that fall in an attack are gone, so keep training.</p>
     <div class="row spread"><b style="font:400 22px var(--display)">Housing ${d.housing}/${d.capacity}</b><span class="note">${icon("coin", 2)} ${fmt(m.gold)} gold · power ${armyPower(m.army, m.unitLevels)}</span></div>
     <div class="capbar"><i style="width:${Math.min(100, (d.housing / d.capacity) * 100)}%"></i></div>
+    ${drillBanner(m)}
     <div class="cards" style="margin-top:12px">${UNIT_KEYS.map((k) => unitCard(G, k)).join("")}</div>
   `,
   );
@@ -35,16 +43,26 @@ export function openArmy(G) {
       act(e.currentTarget, async () => {
         const [kind, unit, n] = b.dataset.act.split(":");
         if (kind === "train") await api("/api/army/train", { body: { unit, count: Number(n) } });
+        if (kind === "drill") {
+          await api("/api/army/drill", { body: { unit, count: Number(n) } });
+          toast(`${UNITS[unit].name} drilled: +${Math.round(drillBonus((m.drills?.units?.[unit] ?? 0) + Number(n)) * 1000) / 10}% HP and damage`, "good");
+        }
         if (kind === "disband") await api("/api/army/disband", { body: { unit, count: Number(n) } });
         if (kind === "up" || kind === "manual") {
           const r = await api("/api/army/upgrade", { body: { unit, use: kind === "manual" ? "manual" : undefined } });
           toast(`${UNITS[unit].name} trained to level ${r.level}`, "good");
         }
-        sfx(kind === "up" || kind === "manual" ? "upgrade" : "coin");
+        sfx(kind === "up" || kind === "manual" || kind === "drill" ? "upgrade" : "coin");
         await G.refreshMe();
         openArmy(G);
       }),
     );
+}
+
+function drillBanner(m) {
+  const d = m.drills;
+  if (!d) return "";
+  return `<div class="coach">${icon("helmet", 2)} <b>Drills</b>: minor upgrades earned from bosses, each +${d.perPoint * 100}% HP and damage for one unit type (up to +${Math.round(d.maxPerUnit * d.perPoint * 100)}%). <b>${d.pool}</b> point${d.pool === 1 ? "" : "s"} to assign · ${d.todayLeft} more can be earned today.</div>`;
 }
 
 function unitCard(G, k) {
@@ -63,6 +81,7 @@ function unitCard(G, k) {
     <span class="stats">${esc(u.role)}</span>
     <span class="stats"><span>HP ${Math.round(u.hp * mult)}</span><span>Dmg ${Math.round(u.dmg * mult)}</span><span>Range ${u.range}</span><span>Speed ${u.speed}</span><span>Housing ${u.housing}</span></span>
     <span class="stats">${beats(k) ? `Strong vs ${beats(k)}` : ""}${weakTo(k) ? ` · Weak to ${weakTo(k)}` : ""}</span>
+    ${locked ? "" : drillRow(m, k)}
     ${
       locked
         ? `<span class="note">Unlocks at Barracks level ${u.unlock}.</span>`

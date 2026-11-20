@@ -2,7 +2,7 @@
 import { BADGES, BUILDINGS, MATERIAL_KEYS, RELICS, START, UNIT_KEYS } from "../shared/rules.js";
 import { FOG_H, FOG_W } from "../shared/world.js";
 import { db, type Player } from "./db";
-import { GameError, award, inventory } from "./players";
+import { GameError, award, drills, inventory } from "./players";
 import { discover, world } from "./bounties";
 import { discoverLairs } from "./bosses";
 
@@ -23,6 +23,11 @@ export function setPlayer(p: Player, body: any) {
   }
   for (const [k, v] of Object.entries(body.army ?? {})) if (UNIT_KEYS.includes(k)) p.army[k] = clamp(v, 0, 999);
   for (const [k, v] of Object.entries(body.unitLevels ?? {})) if (UNIT_KEYS.includes(k)) p.unitLevels[k] = clamp(v, 1, 5);
+  if (body.drills) {
+    const d = drills(p);
+    if (body.drills.pool !== undefined) d.pool = clamp(body.drills.pool, 0, 9999);
+    if (body.drills.resetToday) d.today = 0;
+  }
   if (body.inventory) {
     const inv = inventory(p);
     for (const [k, v] of Object.entries(body.inventory.materials ?? {})) if (MATERIAL_KEYS.includes(k)) inv.materials[k] = clamp(v, 0, 9999);
@@ -65,5 +70,6 @@ export function resetProgress(p: Player) {
   delete p.bossClaims;
   delete p.inventory;
   delete p.intel;
+  delete p.drills;
   db.save();
 }

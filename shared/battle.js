@@ -13,7 +13,7 @@ const BASE_SPEED = 0.8; // field units per tick at speed 1
 const ORDER = ["tank", "infantry", "cavalry", "archer", "siege"];
 const COLUMN_X = { tank: 46, infantry: 38, cavalry: 30, archer: 22, siege: 12 };
 
-function spawn(team, army, levels, towers, rnd, boosts) {
+function spawn(team, army, levels, towers, rnd, boosts, vigor) {
   const out = [];
   for (const type of ORDER) {
     const n = Math.max(0, Math.floor(army?.[type] ?? 0));
@@ -27,8 +27,9 @@ function spawn(team, army, levels, towers, rnd, boosts) {
       if (team === 1) x = FIELD_W - x;
       const u = UNITS[type];
       const m = unitMult(levels?.[type] ?? 1);
-      const boost = 1 + (boosts?.[type] ?? 0) + (boosts?.all ?? 0); // relic damage bonuses
-      out.push({ team, type, x, y, hp: u.hp * m, maxHp: u.hp * m, dmg: u.dmg * m * boost, range: u.range * TILE_U, speed: u.speed * BASE_SPEED, cooldown: u.cooldown, cd: Math.floor(rnd() * 6), splash: (u.splash ?? 0) * TILE_U, target: -1, retarget: 0 });
+      const boost = 1 + (boosts?.[type] ?? 0) + (boosts?.all ?? 0); // damage bonuses (relics, drills)
+      const tough = 1 + (vigor?.[type] ?? 0) + (vigor?.all ?? 0); // HP bonuses (drills)
+      out.push({ team, type, x, y, hp: u.hp * m * tough, maxHp: u.hp * m * tough, dmg: u.dmg * m * boost, range: u.range * TILE_U, speed: u.speed * BASE_SPEED, cooldown: u.cooldown, cd: Math.floor(rnd() * 6), splash: (u.splash ?? 0) * TILE_U, target: -1, retarget: 0 });
     }
   }
   if (team === 1)
@@ -54,12 +55,12 @@ function spawnChampions(champions, rnd) {
 
 /**
  * Run a battle.
- * attacker / defender: { units: {infantry: n, ...}, levels: {infantry: lvl, ...}, towers?, champions?, boosts? }
+ * attacker / defender: { units: {infantry: n, ...}, levels: {infantry: lvl, ...}, towers?, champions?, boosts?, vigor? }
  * With record: true, also returns per-tick frames and events for the replay.
  */
 export function simulate({ attacker, defender, seed, record = false }) {
   const rnd = mulberry32(seed >>> 0);
-  const units = [...spawn(0, attacker.units, attacker.levels, 0, rnd, attacker.boosts), ...spawn(1, defender.units, defender.levels, defender.towers ?? 0, rnd, defender.boosts), ...spawnChampions(defender.champions, rnd)];
+  const units = [...spawn(0, attacker.units, attacker.levels, 0, rnd, attacker.boosts, attacker.vigor), ...spawn(1, defender.units, defender.levels, defender.towers ?? 0, rnd, defender.boosts, defender.vigor), ...spawnChampions(defender.champions, rnd)];
   units.forEach((u, i) => (u.id = i));
   const startHp = [0, 0];
   for (const u of units) startHp[u.team] += u.maxHp;

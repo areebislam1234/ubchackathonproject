@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import {
   BADGES,
   BUILDINGS,
+  DRILLS,
+  drillBonus,
   MATERIAL_KEYS,
   START,
   UNITS,
@@ -17,7 +19,7 @@ import {
   vaultCapWith,
 } from "../shared/rules.js";
 import { FOG_H, FOG_W } from "../shared/world.js";
-import { db, feed, type Inventory, type Player } from "./db";
+import { db, feed, type Drills, type Inventory, type Player } from "./db";
 
 /** After attacking you count as "in combat" this long: no recalling home. */
 export const COMBAT_MS = 30_000;
@@ -189,10 +191,50 @@ export function inventory(p: Player): Inventory {
 export const materialCount = (p: Player) => MATERIAL_KEYS.reduce((s, k) => s + (p.inventory?.materials[k] ?? 0), 0);
 export const relicFx = (p: Player) => relicEffects(p.inventory?.relics ?? {});
 export const vaultCap = (p: Player) => vaultCapWith(p.buildings.vault, relicFx(p));
-/** Relic damage bonuses for the battle simulator, or undefined when there are none. */
+// ── Drills: minor army upgrades from bosses ───────────────────────────
+const utcDay = () => new Date().toISOString().slice(0, 10);
+export function drills(p: Player): Drills {
+  p.drills ??= { units: {}, pool: 0, day: utcDay(), today: 0 };
+  if (p.drills.day !== utcDay()) {
+    p.drills.day = utcDay();
+    p.drills.today = 0;
+  }
+  return p.drills;
+}
+/** Add drill points from a boss win, up to today's cap. Returns how many landed. */
+export function earnDrills(p: Player, points: number) {
+  const d = drills(p);
+  const landed = Math.max(0, Math.min(points, DRILLS.dailyCap - d.today));
+  d.today += landed;
+  d.pool += landed;
+  return landed;
+}
+/** Spend pool points on one unit type (each +0.5% HP and damage, up to 30). */
+export function assignDrill(p: Player, unit: string, count = 1) {
+  const u = (UNITS as any)[unit];
+  if (!u) throw new GameError("Unknown unit.");
+  const d = drills(p);
+  const have = d.units[unit] ?? 0;
+  const n = Math.max(1, Math.min(Math.floor(count) || 1, d.pool, DRILLS.maxPerUnit - have));
+  if (d.pool <= 0) throw new GameError("No drill points to assign. Defeat bosses to earn them.");
+  if (have >= DRILLS.maxPerUnit) throw new GameError(`${u.name} drills are maxed (+${Math.round(drillBonus(have) * 100)}%).`);
+  d.units[unit] = have + n;
+  d.pool -= n;
+  db.save();
+  return { unit, points: d.units[unit], pool: d.pool };
+}
+const drillMap = (p: Player) => Object.fromEntries(Object.entries(p.drills?.units ?? {}).filter(([, n]) => n > 0).map(([k, n]) => [k, drillBonus(n)]));
+
+/** Damage bonuses for the battle simulator (relics + drills), or undefined when there are none. */
 export function boostsOf(p: Player) {
-  const d = relicFx(p).dmg;
+  const d: Record<string, number> = { ...relicFx(p).dmg };
+  for (const [k, v] of Object.entries(drillMap(p))) d[k] = (d[k] ?? 0) + v;
   return Object.keys(d).length ? d : undefined;
+}
+/** HP bonuses for the battle simulator (drills), or undefined when there are none. */
+export function vigorOf(p: Player) {
+  const v = drillMap(p);
+  return Object.keys(v).length ? v : undefined;
 }
 
 /** Add gold, clamped to vault capacity. Returns what actually landed. */
@@ -339,6 +381,10 @@ export function playerView(p: Player) {
     relicFx: relicFx(p),
     bossKills: Object.values(p.bosses?.kills ?? {}).reduce((s, n) => s + n, 0),
     intelCount: p.intel?.length ?? 0,
+    drills: (() => {
+      const d = drills(p);
+      return { units: d.units, pool: d.pool, todayLeft: DRILLS.dailyCap - d.today, perPoint: DRILLS.perPoint, maxPerUnit: DRILLS.maxPerUnit, dailyCap: DRILLS.dailyCap };
+    })(),
     derived: {
       capacity: cap,
       housing: housingOf(p.army),

@@ -6,7 +6,7 @@ import { BOSSES, BOSS_TIERS, RELICS, UNIT_KEYS, bossArmy, rollLoot } from "../sh
 import { FOG_CELL, FOG_W, REALMS, SIGHT } from "../shared/world.js";
 import { lairs } from "./bounties";
 import { db, feed, type BattleRecord, type Player } from "./db";
-import { GameError, addGold, award, boostsOf, exploredBytes, inventory } from "./players";
+import { GameError, award, boostsOf, earnDrills, exploredBytes, inventory, vigorOf } from "./players";
 import { grantReport } from "./intel/reports";
 import type { IntelRarity } from "./intel/types";
 
@@ -115,14 +115,15 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
   const army = bossArmy(l.boss);
   const seed = crypto.randomBytes(4).readUInt32LE(0);
   const boosts = boostsOf(p);
-  const result = simulate({ attacker: { units: sent, levels: p.unitLevels, boosts }, defender: army, seed });
+  const vigor = vigorOf(p);
+  const result = simulate({ attacker: { units: sent, levels: p.unitLevels, boosts, vigor }, defender: army, seed });
   const rec: BattleRecord = {
     id: `F-${++db.data.meta.battleSeq}`,
     bounty: `lair:${id}`,
     boss: id,
     at: now(),
     seed,
-    attacker: { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, ...(boosts ? { boosts } : {}) },
+    attacker: { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, ...(boosts ? { boosts } : {}), ...(vigor ? { vigor } : {}) },
     defender: { id: `boss:${id}`, name: boss.name, units: army.units, levels: army.levels, towers: army.towers, champions: army.champions },
     result,
   };
@@ -158,10 +159,8 @@ function grantLoot(p: Player, bossKey: string, seed: number, forceIntel: string 
   const boss = (BOSSES as any)[bossKey];
   const inv = inventory(p);
   const loot = rollLoot(boss.tier, mulberry32((seed ^ 0x10075eed) >>> 0), { forceIntel, owned: inv.relics });
-  const goldLanded = addGold(p, loot.gold);
-  for (const [k, n] of Object.entries(loot.materials)) inv.materials[k] = (inv.materials[k] ?? 0) + (n as number);
-  for (const [k, n] of Object.entries(loot.manuals)) inv.manuals[k] = (inv.manuals[k] ?? 0) + (n as number);
-  inv.scrolls += loot.scrolls;
+  // the minor army upgrade: drill points, capped per day
+  const drillsLanded = earnDrills(p, loot.drills);
   if (loot.relic) {
     inv.relics[loot.relic] = { at: now(), from: bossKey };
     feed({ kind: "boss", text: `${p.name} claimed the ${(RELICS as any)[loot.relic].name} from ${boss.name}`, player: p.id });
@@ -169,5 +168,5 @@ function grantLoot(p: Player, bossKey: string, seed: number, forceIntel: string 
   }
   // the report is added to the collection now; its contents are fetched a moment later
   const report = loot.intel ? grantReport(p, bossKey, loot.intel.rarity as IntelRarity) : null;
-  return { ...loot, goldLanded, intel: report ? { rarity: report.rarity, id: report.id, category: report.category } : null };
+  return { ...loot, drillsLanded, intel: report ? { rarity: report.rarity, id: report.id, category: report.category } : null };
 }

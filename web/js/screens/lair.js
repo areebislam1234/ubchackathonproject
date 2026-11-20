@@ -1,6 +1,6 @@
 // A boss lair: who lives here, how strong it is, and what it guards.
 import { armyPower } from "/shared/battle.js";
-import { INTEL_CATEGORIES, MATERIALS, RELICS, UNITS, UNIT_KEYS } from "/shared/rules.js";
+import { BOSS_TIERS, DRILLS, INTEL_CATEGORIES, RELICS, UNITS, UNIT_KEYS } from "/shared/rules.js";
 import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
@@ -65,7 +65,7 @@ function render(G) {
     <h3>Guards</h3>
     <p class="stats">${UNIT_KEYS.filter((k) => d.army.units[k]).map((k) => `${d.army.units[k]} ${UNITS[k].name}`).join(" · ")} · level ${d.army.levels.infantry}${d.army.towers ? ` · ${d.army.towers} tower${d.army.towers > 1 ? "s" : ""}` : ""}</p>
     <h3>Spoils</h3>
-    <p class="note">${icon("coin", 1)} Gold, building materials and training manuals${d.tier !== "common" ? ", with a chance of upgrade scrolls and rare relics" : ""}. ${icon(cat?.icon ?? "scroll", 1)} Sometimes carries a <b>${esc(cat?.name ?? "")} intelligence report</b>. The stronger the boss, the better the odds. After every attempt it retreats for ${d.cooldownMin} minutes.</p>
+    <p class="note">${icon("helmet", 1)} <b>${DRILLS.perTier[d.tier]} drill point${DRILLS.perTier[d.tier] > 1 ? "s" : ""}</b>: a minor army upgrade (+${DRILLS.perPoint * 100}% HP and damage per point for the unit you choose). You can earn ${DRILLS.dailyCap} a day; ${G.me.drills?.todayLeft ?? DRILLS.dailyCap} left today.${BOSS_TIERS[d.tier].loot.relic ? ` ${icon("crown", 1)} ${Math.round(BOSS_TIERS[d.tier].loot.relic * 100)}% chance of a relic.` : ""} ${icon(cat?.icon ?? "scroll", 1)} ${Math.round(BOSS_TIERS[d.tier].intel.chance * 100)}% chance of a <b>${esc(cat?.name ?? "")} intelligence report</b>. After every attempt it retreats for ${d.cooldownMin} minutes.</p>
     <h3>Your strike force</h3>
     <div class="cards" id="lair-send">${
       UNIT_KEYS.filter((k) => (me.army[k] ?? 0) > 0)
@@ -128,13 +128,10 @@ async function fight(G) {
 export function lootHtml(r) {
   if (!r.win) return `<p class="note">The boss drove you off. It retreats to its den for a while; train up and come back.</p>`;
   const l = r.loot ?? {};
-  const parts = [[`${icon("coin", 2)} <b>${fmt(l.goldLanded ?? l.gold ?? 0)}</b> gold${l.goldLanded < l.gold ? ` (vault full: ${fmt(l.gold - l.goldLanded)} lost)` : ""}`, ""]];
-  const mats = Object.entries(l.materials ?? {}).filter(([, n]) => n);
-  if (mats.length) parts.push([`${icon("chest", 2)} ${mats.map(([k, n]) => `<b>${n}</b> ${esc(MATERIALS[k].name)}`).join(", ")}`, ""]);
-  const mans = Object.entries(l.manuals ?? {}).filter(([, n]) => n);
-  if (mans.length) parts.push([`${icon("scroll", 2)} ${mans.map(([k, n]) => `<b>${n}</b> ${esc(UNITS[k].name)} manual${n > 1 ? "s" : ""}`).join(", ")}`, "rare"]);
-  if (l.scrolls) parts.push([`${icon("star", 2)} <b>Upgrade scroll</b>: a free level for any unit`, "epic"]);
+  const parts = [];
+  if (l.drillsLanded) parts.push([`${icon("helmet", 2)} <b>${l.drillsLanded} drill point${l.drillsLanded > 1 ? "s" : ""}</b>: assign them to a unit in the Army screen (R)${l.drillsLanded < l.drills ? ` · daily limit reached, ${l.drills - l.drillsLanded} didn't land` : ""}`, ""]);
+  else if (l.drills) parts.push([`${icon("hourglass", 2)} You've earned today's ${DRILLS.dailyCap} drill points. Bosses still drop relics and intel; drills reset at midnight UTC.`, ""]);
   if (l.relic) parts.push([`${icon("crown", 2)} Relic: <b>${esc(RELICS[l.relic].name)}</b>. ${esc(RELICS[l.relic].desc)}`, "legendary"]);
   if (l.intel) parts.push([`${icon("eye", 2)} <b>${esc(l.intel.rarity[0].toUpperCase() + l.intel.rarity.slice(1))} intelligence report</b> recovered. Open Intel (I) to read it.`, l.intel.rarity]);
-  return `<div class="loot-list">${parts.map(([x, cls]) => `<div class="loot-item ${cls}">${x}</div>`).join("")}</div><p class="note">Loot goes to your Bag (B).</p>`;
+  return `<div class="loot-list">${parts.map(([x, cls]) => `<div class="loot-item ${cls}">${x}</div>`).join("")}</div>`;
 }

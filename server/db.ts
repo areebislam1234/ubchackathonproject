@@ -40,6 +40,15 @@ export type Player = {
   bossClaims?: Record<string, { at: number; response: unknown }>; // challenge requestId → result (idempotency)
   inventory?: Inventory;
   intel?: IntelReport[]; // collected intelligence reports, kept forever
+  drills?: Drills;
+};
+
+/** Minor army upgrades earned from bosses. */
+export type Drills = {
+  units: Record<string, number>; // points spent per unit type
+  pool: number; // earned, not yet assigned
+  day: string; // UTC day of `today`
+  today: number; // points earned from bosses on that day
 };
 
 export type Inventory = {
@@ -61,7 +70,8 @@ export type Entry = {
   army: UnitMap;
   levels: UnitMap;
   towers: number;
-  boosts?: Record<string, number>; // relic damage bonuses, frozen at entry like the army
+  boosts?: Record<string, number>; // damage bonuses (relics, drills), frozen at entry like the army
+  vigor?: Record<string, number>; // HP bonuses (drills)
   botPlan?: number[]; // bots: times of their attacks
 };
 
@@ -120,8 +130,8 @@ export type BattleRecord = {
   bounty: string;
   at: number;
   seed: number;
-  attacker: { id: string; name: string; units: UnitMap; levels: UnitMap; boosts?: Record<string, number> };
-  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean; champions?: Champion[]; boosts?: Record<string, number> };
+  attacker: { id: string; name: string; units: UnitMap; levels: UnitMap; boosts?: Record<string, number>; vigor?: Record<string, number> };
+  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean; champions?: Champion[]; boosts?: Record<string, number>; vigor?: Record<string, number> };
   boss?: string; // lair id, for boss fights (bounty is then "lair:<id>")
   result: { winner: string; ticks: number; destruction: number; survival: number; score: number; lost: UnitMap };
 };

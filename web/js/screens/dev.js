@@ -143,6 +143,7 @@ function bossesTab(G) {
       <button class="btn btn-small btn-go" id="d-loot">Fill the Bag: 30 materials, a manual per unit, 3 scrolls</button>
       <button class="btn btn-small btn-gold" id="d-relics">Grant every relic</button>
       <button class="btn btn-small btn-blue" id="d-cool">Reset all boss cooldowns</button>
+      <button class="btn btn-small btn-gold" id="d-drills">+12 drill points, reset today's limit</button>
     </div>
     <h3>Intelligence</h3>
     <div class="row" style="flex-wrap:wrap">
@@ -262,6 +263,7 @@ function wire(G, body) {
     await setPlayer(G, { inventory: { materials: Object.fromEntries(MATERIAL_KEYS.map((k) => [k, (inv.materials[k] ?? 0) + 10])), manuals: Object.fromEntries(UNIT_KEYS.map((k) => [k, (inv.manuals[k] ?? 0) + 1])), scrolls: (inv.scrolls ?? 0) + 3 } }, "Bag filled.");
     rerender();
   });
+  on("#d-drills", async () => (await setPlayer(G, { drills: { pool: (G.me.drills?.pool ?? 0) + 12, resetToday: true } }, "12 drill points added; today's limit reset."), rerender()));
   on("#d-relics", async () => (await setPlayer(G, { inventory: { relics: RELIC_KEYS } }, "Every relic granted."), rerender()));
   on("#d-cool", async () => {
     await api("/api/dev/boss-cooldowns", { body: {} });

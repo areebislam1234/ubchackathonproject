@@ -136,7 +136,7 @@ try {
   const inCombat = await call(alice.token, "POST", "/api/recall", {});
   ok(inCombat.status === 400 && /combat/.test(inCombat.body.error), "you can't recall home right after a battle");
   const rec = atk.battle;
-  const replay = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts }, defender: rec.defender, seed: rec.seed });
+  const replay = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts, vigor: rec.attacker.vigor }, defender: rec.defender, seed: rec.seed });
   ok(replay.score === rec.result.score && replay.winner === rec.result.winner && replay.ticks === rec.result.ticks, `the browser replay reproduces the server's battle exactly (${rec.result.winner}, +${rec.result.score})`);
   const me2 = (await call(alice.token, "GET", "/api/me")).body;
   ok(me2.army.infantry === 6 - (rec.result.lost.infantry ?? 0) && me2.army.archer === 4 - (rec.result.lost.archer ?? 0), "fallen units are removed from your army");
@@ -302,12 +302,13 @@ try {
   ok((await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "far-away-001", pos: { x: common.x + 40, y: common.y } })).status === 400, "you must stand at the lair to challenge it");
   const bg0 = (await call(ct, "GET", "/api/me")).body.gold;
   const fightB = (await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-001", pos: near(common) })).body;
-  ok(fightB.win === true && fightB.loot.gold > 0, "the starting army beats a common boss and wins loot");
+  ok(fightB.win === true && fightB.loot.drillsLanded === 1 && !("gold" in fightB.loot), "the starting army beats a common boss: 1 drill point, no gold");
   const bossReplay = simulate({ attacker: { units: fightB.battle.attacker.units, levels: fightB.battle.attacker.levels, boosts: fightB.battle.attacker.boosts }, defender: fightB.battle.defender, seed: fightB.battle.seed, record: true });
   ok(bossReplay.score === fightB.battle.result.score && (bossReplay as any).roster.some((u: any) => u.type === "boss"), "boss fights replay exactly in the browser, champion included");
   const dupB = (await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-001", pos: near(common) })).body;
   const bg1 = (await call(ct, "GET", "/api/me")).body.gold;
-  ok(dupB.battle.id === fightB.battle.id && bg1 === bg0 + fightB.loot.goldLanded, "a duplicate request returns the same result and pays only once");
+  const pool1 = (await call(ct, "GET", "/api/me")).body.drills.pool;
+  ok(dupB.battle.id === fightB.battle.id && bg1 === bg0 && pool1 === 1, "a duplicate request returns the same result and pays only once");
   ok((await call(ct, "POST", `/api/bosses/${common.id}/challenge`, { units: army0, requestId: "boss-fight-002", pos: near(common) })).status === 429, "the boss retreats after every attempt (cooldown)");
   await call(ct, "POST", "/api/explore", { cells: [], pos: near(legend) });
   await call(ct, "POST", "/api/dev/player", { army: { infantry: 6, archer: 4 } });
@@ -332,6 +333,17 @@ try {
   ok(man.status === 200 && man.body.level === 3, "a training manual levels a unit for free");
   await call(ct, "POST", "/api/dev/player", { buildings: { vault: 1 }, inventory: { relics: ["ledger-scale"] } });
   ok((await call(ct, "GET", "/api/me")).body.derived.vaultCap === Math.round(1500 * 1.05), "relics give permanent bonuses (vault +5%)");
+
+  console.log("\nDrills (minor army upgrades from bosses)");
+  ok(rollLoot("common", mulberry32(1)).drills === 1 && rollLoot("legendary", mulberry32(1)).drills === 8, "drill points scale with boss tier (1 common to 8 legendary)");
+  await call(ct, "POST", "/api/dev/player", { drills: { pool: 0, resetToday: true } });
+  ok((await call(ct, "GET", "/api/me")).body.drills.todayLeft === 12, "12 drill points can be earned per day");
+  await call(ct, "POST", "/api/dev/player", { drills: { pool: 40 } });
+  const dr = (await call(ct, "POST", "/api/army/drill", { unit: "infantry", count: 40 })).body;
+  ok(dr.drills.units.infantry === 30 && dr.drills.pool === 10, "drills cap at 30 points (+15%) per unit type");
+  ok((await call(ct, "POST", "/api/army/drill", { unit: "infantry" })).status === 400, "a maxed unit can't take more drills");
+  const vigArgs = { attacker: { units: { infantry: 6 }, levels: { infantry: 1 }, vigor: { infantry: 0.15 }, boosts: { infantry: 0.15 } }, defender: { units: { archer: 4 }, levels: { archer: 1 } }, seed: 7 };
+  ok(JSON.stringify(simulate(vigArgs)) === JSON.stringify(simulate(vigArgs)), "fights with drill bonuses are deterministic, so replays match");
 
   console.log("\nIntelligence");
   const sc = parseScenario({ ticker: "NBAMVP27", title: "2027 NBA MVP", category: "Sports", contracts: [{ label: "Shai Gilgeous-Alexander wins MVP", instrumentSymbol: "A" }, { label: "Nikola Jokić wins MVP", instrumentSymbol: "B" }] }, { label: "Shai Gilgeous-Alexander wins MVP", instrumentSymbol: "A" });

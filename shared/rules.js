@@ -103,7 +103,7 @@ export const BOSS_TIERS = {
     look: { scale: 1, aura: null },
     champion: { hp: 520, dmg: 18 },
     escort: { units: { infantry: 3, archer: 2, tank: 0, cavalry: 0, siege: 0 }, level: 1, towers: 0 },
-    loot: { gold: [60, 120], materials: [1, 3], manual: 0.15, manuals: [1, 1], scroll: 0, relic: 0 },
+    loot: { relic: 0 },
     intel: { chance: 0.1, rarity: { common: 1 } },
   },
   rare: {
@@ -114,7 +114,7 @@ export const BOSS_TIERS = {
     look: { scale: 1.5, aura: "#7ba8f2" },
     champion: { hp: 1000, dmg: 25 },
     escort: { units: { infantry: 4, archer: 4, tank: 1, cavalry: 0, siege: 0 }, level: 2, towers: 1 },
-    loot: { gold: [150, 280], materials: [3, 6], manual: 0.35, manuals: [1, 1], scroll: 0.03, relic: 0.04 },
+    loot: { relic: 0 },
     intel: { chance: 0.25, rarity: { common: 0.6, rare: 0.4 } },
   },
   epic: {
@@ -125,7 +125,7 @@ export const BOSS_TIERS = {
     look: { scale: 2, aura: "#c49bf2" },
     champion: { hp: 2600, dmg: 42 },
     escort: { units: { infantry: 6, archer: 5, tank: 2, cavalry: 2, siege: 0 }, level: 3, towers: 1 },
-    loot: { gold: [300, 550], materials: [6, 12], manual: 0.6, manuals: [1, 2], scroll: 0.15, relic: 0.15 },
+    loot: { relic: 0.1 },
     intel: { chance: 0.45, rarity: { common: 0.2, rare: 0.5, epic: 0.3 } },
   },
   legendary: {
@@ -136,7 +136,7 @@ export const BOSS_TIERS = {
     look: { scale: 3, aura: "#e23c3c" },
     champion: { hp: 4300, dmg: 60 },
     escort: { units: { infantry: 5, archer: 4, tank: 2, cavalry: 2, siege: 0 }, level: 4, towers: 1 },
-    loot: { gold: [600, 1000], materials: [12, 20], manual: 1, manuals: [1, 2], scroll: 0.4, relic: 0.4 },
+    loot: { relic: 0.25 },
     intel: { chance: 0.7, rarity: { rare: 0.3, epic: 0.45, legendary: 0.25 } },
   },
 };
@@ -221,6 +221,21 @@ export function bossArmy(key) {
   };
 }
 
+// ── Army upgrades ─────────────────────────────────────────────────────
+// Two tracks make troops stronger on top of unit levels:
+//   Mastery (major): bought with the upgrade currency that realized investment yield converts into.
+//   Drills (minor): earned by defeating bosses. Capped at a quarter of Mastery, so fighting bosses
+//   is always worth it but can never replace investing.
+export const MASTERY = { perRank: 0.03, maxRank: 20 }; // +3% HP and damage per rank, up to +60%
+export const DRILLS = {
+  perPoint: 0.005, // +0.5% HP and damage per point on one unit type
+  maxPerUnit: 30, // up to +15% per unit type
+  dailyCap: 12, // points a warlord can earn from bosses per day (UTC)
+  perTier: { common: 1, rare: 2, epic: 4, legendary: 8 },
+};
+/** HP / damage bonus fraction from drill points on one unit type. */
+export const drillBonus = (points) => Math.min(DRILLS.maxPerUnit, Math.max(0, points ?? 0)) * DRILLS.perPoint;
+
 // ── Loot ──────────────────────────────────────────────────────────────
 export const MATERIALS = {
   timber: { name: "Timber", desc: "Seasoned beams for walls and halls." },
@@ -269,7 +284,6 @@ export function materialDiscount(goldCost, have) {
 }
 
 const tierIndex = (t) => BOSS_TIER_KEYS.indexOf(t);
-const between = (rnd, [lo, hi]) => lo + Math.floor(rnd() * (hi - lo + 1));
 function weighted(rnd, weights) {
   const entries = Object.entries(weights).filter(([, w]) => w > 0);
   const total = entries.reduce((s, [, w]) => s + w, 0);
@@ -279,8 +293,9 @@ function weighted(rnd, weights) {
 }
 
 /**
- * Roll a boss's loot. Pure: the same rnd sequence always gives the same loot.
- * `owned` relics are skipped so a relic drop is always something new (gold instead if all are owned).
+ * Roll a boss's loot: drill points (a minor army upgrade), sometimes a relic, sometimes an
+ * intelligence report. Bosses give no gold or items. Pure: the same rnd sequence gives the same loot.
+ * `owned` relics are skipped so a relic drop is always something new (no relic if all are owned).
  * `forceIntel` (dev tools) guarantees an intel drop of that rarity.
  * @param {string} tier
  * @param {() => number} rnd
@@ -288,26 +303,11 @@ function weighted(rnd, weights) {
  */
 export function rollLoot(tier, rnd, { owned = {}, forceIntel = null } = {}) {
   const t = BOSS_TIERS[tier];
-  const L = t.loot;
-  /** @type {{ gold: number, materials: Record<string, number>, manuals: Record<string, number>, scrolls: number, relic: string | null, intel: { rarity: string } | null }} */
-  const loot = { gold: between(rnd, L.gold), materials: {}, manuals: {}, scrolls: 0, relic: null, intel: null };
-  const nMat = between(rnd, L.materials);
-  for (let i = 0; i < nMat; i++) {
-    const k = MATERIAL_KEYS[Math.floor(rnd() * MATERIAL_KEYS.length)];
-    loot.materials[k] = (loot.materials[k] ?? 0) + 1;
-  }
-  if (rnd() < L.manual) {
-    const n = between(rnd, L.manuals);
-    for (let i = 0; i < n; i++) {
-      const u = UNIT_KEYS[Math.floor(rnd() * UNIT_KEYS.length)];
-      loot.manuals[u] = (loot.manuals[u] ?? 0) + 1;
-    }
-  }
-  if (rnd() < L.scroll) loot.scrolls = 1;
-  if (rnd() < L.relic) {
+  /** @type {{ drills: number, relic: string | null, intel: { rarity: string } | null }} */
+  const loot = { drills: DRILLS.perTier[tier] ?? 0, relic: null, intel: null };
+  if (rnd() < t.loot.relic) {
     const pool = RELIC_KEYS.filter((k) => tierIndex(RELICS[k].minTier) <= tierIndex(tier) && !owned[k]);
     if (pool.length) loot.relic = pool[Math.floor(rnd() * pool.length)];
-    else loot.gold += 200;
   }
   if (forceIntel) loot.intel = { rarity: forceIntel };
   else if (rnd() < t.intel.chance) loot.intel = { rarity: weighted(rnd, t.intel.rarity) };

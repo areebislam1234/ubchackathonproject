@@ -29,19 +29,19 @@ Built for UBC 2026 from our design doc. Its three technologies each have a disti
 
 Away from the bounties, **21 bosses** guard fixed lairs across the seven realms. Find one by exploring (a "Boss sighted" toast; legendary bosses shake the ground), walk up to it and press **E**.
 
-| Tier | How it looks | Who can beat it | Loot |
-|---|---|---|---|
-| Common | Hero-sized, ring of stones | The starting army | Gold, a few materials, sometimes a training manual |
-| Rare | 1.5× size, blue aura, bones and a torch | An early army (about Keep 2) | More of everything; a small chance of scrolls and relics |
-| Epic | 2× size, purple aura, spiked palisade, braziers | Level-4 armies | Big hauls, frequent manuals, better relic odds |
-| Legendary | 3× size, scorched ground, flame aura, skull totems | Maxed armies only | The best loot; intel drops 70% of the time |
+| Tier | How it looks | Who can beat it | Drill points | Relic | Intel |
+|---|---|---|---|---|---|
+| Common | Hero-sized, ring of stones | The starting army | 1 | – | 10% |
+| Rare | 1.5× size, blue aura, bones and a torch | An early army (about Keep 2) | 2 | – | 25% |
+| Epic | 2× size, purple aura, spiked palisade, braziers | Level-4 armies | 4 | 10% | 45% |
+| Legendary | 3× size, scorched ground, flame aura, skull totems | Maxed armies only | 8 | 25% | 70% |
 
 - **Battles** use the same deterministic simulator as bounties: your army against the boss's guards plus the boss itself as one huge champion unit. Siege and Tanks hit bosses hard; arrows barely scratch them. Units that fall are lost.
 - **Fair play.** Rewards are rolled and paid on the server. You must stand at the lair, and every attempt (won or lost) sends the boss back to its den for a while (5 to 60 minutes by tier). Each challenge carries a request id, so a retried or duplicated request returns the stored result instead of fighting or paying twice.
-- **The Bag (B)** holds the loot:
-  - **Materials** take 20 gold off a building upgrade each, up to half its price. Tick "use materials" in the Fortress.
-  - **Training manuals** level one unit type for free; **upgrade scrolls** level any unit. Both stay within the Training Grounds cap.
-  - **Relics** are permanent: extra vault capacity, extra watchtowers when rivals attack you, or damage bonuses the battle simulator applies.
+- **Bosses give no gold.** Their reward is a **minor army upgrade**: drill points, assigned in the Army screen (R). Each point gives one unit type +0.5% HP and damage, up to 30 points (+15%) per unit. At most 12 points can be earned per day.
+- **Drills are deliberately capped below Mastery,** the major upgrade track bought with the currency realized investment yield converts into (+3% per rank, up to +60%). Fighting bosses is always worth it, but it never replaces investing.
+- **Relics** (epic and legendary bosses) are permanent: extra vault capacity, extra watchtowers when rivals attack you, or damage bonuses the battle simulator applies.
+- **The Bag (B)** shows your drill pool and relics. Materials, training manuals and upgrade scrolls earned before this change still work, but bosses no longer drop them.
 - **Badges:** Boss Slayer, Giant Killer (a legendary), Relic Hunter (3 relics) and Spymaster (10 reports) mint like the others.
 - Every boss number and drop chance lives in `shared/rules.js` (`BOSS_TIERS`, `BOSSES`, `RELICS`).
 
@@ -90,7 +90,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:4000**, choose **New warlord**, and pick a name and a password (8+ characters). Next time, use **Sign in**. **Log out** is in Profile.
+Open **http://localhost:4000**, choose **New warlord**, and pick a name and a password (8+ characters). Next time, use **Sign in**. **Log out** is in Profile; closing the tab or browser also signs you out (a refresh doesn't), and every sign-in starts at your fortress gate.
 
 - **Move:** WASD / arrows, or click to walk (it finds the way around obstacles). Hold **Shift** to sprint. **E** interacts, scroll zooms, drag looks around.
 - **Terrain:** only what you can see blocks you (trees, rocks, mountain peaks, water). Mountain ranges are walkable rock with peaks scattered on them, and winding passes through every range. Dense forests have trails. A walk anywhere is on average only about 15% longer than a straight line.
@@ -98,12 +98,12 @@ Open **http://localhost:4000**, choose **New warlord**, and pick a name and a pa
 - **Dev tools** (the **Dev** button in the dock, or the `` ` `` key) cover everything a demo needs:
   - **Warlord:** set gold, Crystals and trophies, step any building or unit level, add troops, grant badges, or **Max everything** in one click. **Reset** puts you back to a new warlord.
   - **World:** reveal the whole map and attune every waystone, teleport to any town, your fortress or exact coordinates, and clear the combat cooldown.
-  - **Bosses:** teleport to any lair, reset boss cooldowns, fill the Bag, grant relics, and choose the rarity of the next intel drop.
+  - **Bosses:** teleport to any lair, reset boss cooldowns, add drill points and reset the daily limit, fill the Bag, grant relics, and choose the rarity of the next intel drop.
   - **Bounties:** spawn one in any realm (choose tier and featured) and jump to it. See every live bounty with its hidden question, and start, end or settle any of them (settling needs mock Gemini).
   - Inside a bounty sheet the same start, end and settle buttons appear.
   - The panel is on by default. Set `DEV_TOOLS=off` in `.env` before sharing the game publicly.
 - **Progress** is saved in `.data/local`. `npm run dev -- --fresh` starts over.
-- **Tests:** `npm test` runs 94 end-to-end checks on a separate stack, so it never touches your game.
+- **Tests:** `npm test` runs 99 end-to-end checks on a separate stack, so it never touches your game.
 
 ## 3-minute demo
 
@@ -214,7 +214,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 | Command | Does |
 |---|---|
 | `npm run dev` | Runs everything for the current `NETWORK` (`-- --fresh` wipes local progress) |
-| `npm test` | 94 end-to-end checks on an isolated stack |
+| `npm test` | 99 end-to-end checks on an isolated stack |
 | `npm run setup-solana` | Creates the authority and funds it if possible, then creates the badge mints |
 | `npm run print-filter` | Writes the QuickNode filter with your addresses filled in |
 | `npm run world-preview` | Renders the generated world to `docs/world-map.png` |
