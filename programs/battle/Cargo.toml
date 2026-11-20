@@ -2,7 +2,8 @@
 name = "stakeclash-battle"
 version = "0.1.0"
 edition = "2021"
-description = "StakeClash battle engine 2: integer-only, used by the Solana program"
+rust-version = "1.84"
+description = "StakeClash battle engine 2: integer-only, shared by the Solana program and checked against the JavaScript engine"
 license = "MIT"
 
 [lib]

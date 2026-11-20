@@ -1,5 +1,6 @@
 [toolchain]
 anchor_version = "0.31.1"
+solana_version = "3.0.12"
 
 [features]
 resolution = true
@@ -15,3 +16,8 @@ stakeclash = "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e"
 cluster = "devnet"
 wallet = ".data/devnet/authority.json"
 
+[scripts]
+test = "npx tsx scripts/battle-vectors.ts && cargo test -p stakeclash-battle --release"
+
+[workspace]
+members = ["programs/stakeclash"]

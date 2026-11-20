@@ -300,7 +300,10 @@ pub mod stakeclash {
     /// Resolve a battle on-chain. The seed comes from the most recent SlotHashes entry mixed with the
     /// battle counter, so neither the server nor the player can pick it. Player sides are bound to
     /// their profiles (levels from the chain, abilities must be unlocked) and their records updated.
-    pub fn resolve_battle(ctx: Context<ResolveBattle>, kind: u8, context: String, mut attacker: BattleSide, mut defender: BattleSide) -> Result<()> {
+    pub fn resolve_battle(ctx: Context<ResolveBattle>, kind: u8, context: String, attacker: BattleSide, defender: BattleSide) -> Result<()> {
+        // (Anchor instruction arguments can't be declared `mut`, so rebind them)
+        let mut attacker = attacker;
+        let mut defender = defender;
         require!(context.len() <= 40, GameError::TooLong);
         require!(attacker.slots.iter().any(|s| s.n > 0), GameError::BadFormation);
         if let Some(p) = ctx.accounts.attacker_profile.as_ref() {
