@@ -1,4 +1,4 @@
-// Hands the StakeClash program's game authority to another key: the authority of whoever runs the
+// Hands the Fortune Front program's game authority to another key: the authority of whoever runs the
 // game server (their `npm run setup-solana` prints it). Run by the current authority.
 //   NETWORK=devnet npx tsx scripts/set-authority.ts <new authority address>
 import { address } from "@solana/kit";

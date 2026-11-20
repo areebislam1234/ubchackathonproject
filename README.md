@@ -1,10 +1,10 @@
-# StakeClash
+# Fortune Front
 
 An 8-bit strategy game built on real prediction markets. Explore a huge world for **blind bounties**, out-fight rival warlords to win the right to bet, then call the **live Gemini market** that was sealed inside. Badges mint to your **Solana** wallet, and the game learns about every on-chain event through **QuickNode Streams**.
 
 ![The world](docs/world.png)
 
-Built for UBC 2026 from our design doc. Its three technologies each have a distinct job: Solana for ownership and verifiable records, Gemini for market data, and QuickNode Streams for blockchain events. See [How StakeClash uses Solana](#how-stakeclash-uses-solana) (with every program ID) and [How StakeClash uses Gemini](#how-stakeclash-uses-gemini-prediction-markets).
+Built for UBC 2026 from our design doc. Its three technologies each have a distinct job: Solana for ownership and verifiable records, Gemini for market data, and QuickNode Streams for blockchain events. See [How Fortune Front uses Solana](#how-stakeclash-uses-solana) (with every program ID) and [How Fortune Front uses Gemini](#how-stakeclash-uses-gemini-prediction-markets).
 
 ---
 
@@ -92,7 +92,7 @@ Each ability is unlocked once with Might. Before each fight you **bring up to 2*
 
 ## On-chain program, QuickNode indexer and the Economic Board
 
-Everything that moves value or decides a result belongs to the StakeClash Solana program (`programs/`; build and deploy steps in [programs/TEAMMATE.md](programs/TEAMMATE.md)).
+Everything that moves value or decides a result belongs to the Fortune Front Solana program (`programs/`; build and deploy steps in [programs/TEAMMATE.md](programs/TEAMMATE.md)).
 
 - **Gold and Might are SPL tokens.** The program's config PDA is their mint authority and holds each player's custodial account, so buying something burns tokens without a wallet pop-up.
 - **Stakes** for duels (and later bounties) sit in a program vault until they settle.
@@ -232,11 +232,11 @@ Gemini's prediction-markets REST API returns current prices but no odds history,
 - **Hot bounties:** a sharp move can stir up the market's realm: a featured bounty around that market appears there, its question sealed like any other.
 - **Duel from any chart:** "Duel on this market in the Colosseum" opens a challenge with that market picked.
 
-## How StakeClash uses Solana
+## How Fortune Front uses Solana
 
-Everything on-chain uses existing Solana programs; StakeClash deploys no program of its own.
+Everything on-chain uses existing Solana programs; Fortune Front deploys no program of its own.
 
-| Program | ID | What StakeClash does with it |
+| Program | ID | What Fortune Front does with it |
 |---|---|---|
 | SPL Token-2022 | `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | Each badge (First Blood, Boss Slayer, Gladiator…) is its own mint with the **MetadataPointer** and **TokenMetadata** extensions: name, symbol and image live on the mint. One badge is minted to a player's wallet when earned. |
 | SPL Token | `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` | **Devnet USDC** (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, Circle's devnet mint) for Treasury deposits and withdrawals |
@@ -249,7 +249,7 @@ Everything on-chain uses existing Solana programs; StakeClash deploys no program
 - **QuickNode Streams** watches the chain and posts the game's transactions to `/webhooks/quicknode` (HMAC-verified, de-duplicated by signature). That's how badges become "On Solana", standings and duel results become verified, Colosseum receipts get their ✓, and deposits are credited exactly once.
 - `npm run setup-solana` prints the authority address and every badge mint for your network; `/api/config` and `/api/health` list them too.
 
-## How StakeClash uses Gemini prediction markets
+## How Fortune Front uses Gemini prediction markets
 
 | Endpoint | Used for |
 |---|---|

@@ -13,7 +13,7 @@ function show(text) {
     el.setAttribute("aria-live", "polite");
     document.body.append(el);
   }
-  el.innerHTML = `<div class="chain-wait-box panel"><span class="chain-spin" aria-hidden="true"></span><b>${esc(text)}</b><span class="note">The StakeClash program on Solana rolls the battle; nobody can pick the result.</span></div>`;
+  el.innerHTML = `<div class="chain-wait-box panel"><span class="chain-spin" aria-hidden="true"></span><b>${esc(text)}</b><span class="note">The Fortune Front program on Solana rolls the battle; nobody can pick the result.</span></div>`;
   el.hidden = false;
 }
 function hide() {

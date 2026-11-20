@@ -1,4 +1,4 @@
-// Solana side of StakeClash: the game authority keypair, one Token-2022 collectible mint per badge,
+// Solana side of Fortune Front: the game authority keypair, one Token-2022 collectible mint per badge,
 // minting badges to players' wallets, sealing bounty results in memos, and wallet-link checks.
 // Same code on the local LiteSVM chain and on devnet; only the RPC URL differs.
 import crypto from "node:crypto";
@@ -129,7 +129,7 @@ export async function airdrop(addr: string, sol = 2) {
 }
 
 // ── Badge collectibles (Token-2022 with on-mint metadata) ─────────────
-export const badgeName = (id: string) => `StakeClash: ${(BADGES as any)[id]?.name ?? id}`;
+export const badgeName = (id: string) => `Fortune Front: ${(BADGES as any)[id]?.name ?? id}`;
 export const badgeUri = (id: string) => `${env.publicUrl.replace(/\/$/, "")}/meta/${id}.json`;
 
 export async function createBadgeMint(id: string): Promise<string> {
@@ -143,7 +143,7 @@ export async function createBadgeMint(id: string): Promise<string> {
     name: badgeName(id),
     symbol: "CLASH",
     uri: badgeUri(id),
-    additionalMetadata: new Map([["game", "StakeClash"], ["badge", id]]),
+    additionalMetadata: new Map([["game", "Fortune Front"], ["badge", id]]),
   });
   const space = BigInt(T22.getMintSize([pointer]));
   const rent = await rpc.getMinimumBalanceForRentExemption(BigInt(T22.getMintSize([pointer, metadata]))).send();
@@ -257,7 +257,7 @@ export function walletChallenge(p: Player, wallet: string) {
   } catch {
     throw new Error("That isn't a Solana address.");
   }
-  const message = `StakeClash: link this wallet to ${p.name}\nPlayer: ${p.id}\nWallet: ${wallet}\nNonce: ${crypto.randomBytes(8).toString("hex")}\nIssued: ${new Date().toISOString()}`;
+  const message = `Fortune Front: link this wallet to ${p.name}\nPlayer: ${p.id}\nWallet: ${wallet}\nNonce: ${crypto.randomBytes(8).toString("hex")}\nIssued: ${new Date().toISOString()}`;
   challenges.set(p.id, { message, at: Date.now() });
   return message;
 }

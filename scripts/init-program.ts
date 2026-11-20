@@ -39,5 +39,5 @@ const ix = await initializeIx(auth.address, gold.address, might.address);
 (ix.accounts as any)[3] = { ...ix.accounts![3], signer: might };
 const sig = await send([ix]);
 await confirm(sig);
-console.log(`Initialized StakeClash on ${PROGRAM_ID}\n  config ${cfg}\n  Gold mint ${gold.address}\n  Might mint ${might.address}\n  authority ${auth.address}\n  tx ${sig}`);
+console.log(`Initialized Fortune Front on ${PROGRAM_ID}\n  config ${cfg}\n  Gold mint ${gold.address}\n  Might mint ${might.address}\n  authority ${auth.address}\n  tx ${sig}`);
 console.log("Restart the game server: it detects the program and switches to on-chain mode.");

@@ -1,4 +1,4 @@
-/* StakeClash: 8-bit UI. Every frame is built from hard 3px "pixels": notched corners,
+/* Fortune Front: 8-bit UI. Every frame is built from hard 3px "pixels": notched corners,
    inset bevels, no blur, no rounded corners. Wood and parchment, like a field map. */
 :root {
   --px: 3px;
@@ -513,7 +513,8 @@ input[type="password"] {
 }
 .dock {
   position: absolute;
-  right: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 12px;
   display: flex;
   gap: 6px;
@@ -1151,6 +1152,7 @@ a {
   .dock {
     left: 8px;
     right: 8px;
+    transform: none;
     gap: 4px;
   }
   .dock-btn {
@@ -1803,12 +1805,7 @@ label.field select {
   bottom: 96px;
   max-width: min(640px, calc(100vw - 24px));
 }
-@media (min-width: 1500px) {
-  .ticker {
-    bottom: 12px;
-    max-width: min(560px, calc(100vw - 920px));
-  }
-}
+
 @media (max-width: 560px) {
   .colo-art {
     width: 80px;

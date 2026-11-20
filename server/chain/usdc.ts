@@ -38,7 +38,7 @@ export async function depositTarget() {
 
 /** A Solana Pay transfer request: Phantom and other wallets open it as a ready-to-sign USDC payment. */
 export function solanaPayUrl(recipient: string, mint: string, amountUsdc: number | null, reference: string) {
-  const q = new URLSearchParams({ "spl-token": mint, reference, label: "StakeClash", message: "Deposit test USDC into StakeClash" });
+  const q = new URLSearchParams({ "spl-token": mint, reference, label: "Fortune Front", message: "Deposit test USDC into Fortune Front" });
   if (amountUsdc && amountUsdc > 0) q.set("amount", String(amountUsdc));
   return `solana:${recipient}?${q.toString()}`;
 }

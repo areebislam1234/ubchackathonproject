@@ -9,7 +9,7 @@ export function oddsChart(series, { height = 150, label = "" } = {}) {
   const pts = series?.points ?? [];
   if (pts.length < 2) {
     const since = series?.since ? ` since ${clock(series.since)}` : "";
-    return `<div class="ochart empty"><p class="note">Recording this market's odds${since}. The chart fills in as Gemini's prices come in (Gemini's API gives live prices, so StakeClash keeps the history itself).</p></div>`;
+    return `<div class="ochart empty"><p class="note">Recording this market's odds${since}. The chart fills in as Gemini's prices come in (Gemini's API gives live prices, so Fortune Front keeps the history itself).</p></div>`;
   }
   const W = 480;
   const H = height;

@@ -1,4 +1,4 @@
-// Creates the StakeClash program's keypair (its address on Solana) once, in .data/<network>/,
+// Creates the Fortune Front program's keypair (its address on Solana) once, in .data/<network>/,
 // and prints the address. That folder is never committed. Run before the first `anchor deploy`;
 // put the printed address in programs/stakeclash/src/lib.rs (declare_id!) and Anchor.toml.
 //   npx tsx scripts/program-keypair.ts

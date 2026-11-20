@@ -1,4 +1,4 @@
-// The bridge between the game and the StakeClash program. Every action that moves Gold, Might or a
+// The bridge between the game and the Fortune Front program. Every action that moves Gold, Might or a
 // stake, decides a battle or changes a warlord's loadout goes through here:
 //
 //   game action ──> queue (persisted) ──> program instruction ──> Solana ──> QuickNode ──> indexer

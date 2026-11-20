@@ -396,7 +396,7 @@ export function networkSteps(): Step[] {
     },
     async () => {
       const g = gameActivity();
-      return live("quicknode-stream", { kind: "facts", heading: "StakeClash on-chain (verified by the Stream)", facts: [{ label: "Game transactions, 24h", value: String(g.day) }, { label: "Badges confirmed, 24h", value: String(g.badges) }, { label: "Standings sealed, 24h", value: String(g.seals) }, { label: "Stream deliveries", value: String(g.deliveries) }] });
+      return live("quicknode-stream", { kind: "facts", heading: "Fortune Front on-chain (verified by the Stream)", facts: [{ label: "Game transactions, 24h", value: String(g.day) }, { label: "Badges confirmed, 24h", value: String(g.badges) }, { label: "Standings sealed, 24h", value: String(g.seals) }, { label: "Stream deliveries", value: String(g.deliveries) }] });
     },
   ];
 }

@@ -1,4 +1,4 @@
-// The chain decides the battle. A fight is split in three: the game validates it, the StakeClash
+// The chain decides the battle. A fight is split in three: the game validates it, the Fortune Front
 // program resolves it (its seed comes from SlotHashes, so nobody can pick it), and only then does the
 // game apply the result. The game re-runs the same engine with the chain's seed (the Rust and
 // JavaScript engines are identical), so the replay the player watches is exactly what was decided.

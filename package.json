@@ -2,7 +2,7 @@
   "name": "stakeclash",
   "version": "0.1.0",
   "private": true,
-  "description": "StakeClash: an 8-bit strategy game. Explore a huge world for blind bounties, battle rival warlords, then call the hidden Gemini prediction market. Badges on Solana, events via QuickNode Streams.",
+  "description": "Fortune Front: an 8-bit strategy game. Explore a huge world for blind bounties, battle rival warlords, then call the hidden Gemini prediction market. Badges on Solana, events via QuickNode Streams.",
   "type": "module",
   "engines": {
     "node": ">=20"

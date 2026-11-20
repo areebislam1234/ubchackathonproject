@@ -580,7 +580,7 @@ try {
   console.log("\nBadge metadata");
   const meta = await (await fetch(`${gameUrl}/meta/oracle.json`)).json();
   const png = await fetch(`${gameUrl}/meta/oracle.png`);
-  ok(meta.name === "StakeClash: Oracle" && meta.image.endsWith("/meta/oracle.png") && png.headers.get("content-type") === "image/png", "each badge has wallet-ready metadata and a pixel-art image");
+  ok(meta.name === "Fortune Front: Oracle" && meta.image.endsWith("/meta/oracle.png") && png.headers.get("content-type") === "image/png", "each badge has wallet-ready metadata and a pixel-art image");
 } catch (e) {
   failures++;
   console.error("\n✘", e instanceof Error ? e.message : e);

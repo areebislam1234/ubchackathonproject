@@ -1,4 +1,4 @@
-// StakeClash game server: API, QuickNode Streams webhook, badge metadata and the static client.
+// Fortune Front game server: API, QuickNode Streams webhook, badge metadata and the static client.
 import fs from "node:fs";
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
@@ -448,11 +448,11 @@ app.get("/meta/:file", (req, res) => {
   const base = env.publicUrl.replace(/\/$/, "");
   if (m[2] === "json")
     return void res.json({
-      name: `StakeClash: ${def.name}`,
+      name: `Fortune Front: ${def.name}`,
       symbol: "CLASH",
-      description: `${def.desc} Earned in StakeClash, an 8-bit strategy game built on Gemini prediction markets.`,
+      description: `${def.desc} Earned in Fortune Front, an 8-bit strategy game built on Gemini prediction markets.`,
       image: `${base}/meta/${id}.png`,
-      attributes: [{ trait_type: "badge", value: def.name }, { trait_type: "game", value: "StakeClash" }],
+      attributes: [{ trait_type: "badge", value: def.name }, { trait_type: "game", value: "Fortune Front" }],
     });
   res.type("png").send(badgePng(def.icon));
 });
@@ -498,7 +498,7 @@ const refunded = refundMastery();
 startOnchain();
 if (refunded) console.log(`Mastery became abilities: refunded Might to ${refunded} player(s)`);
 app.listen(env.gamePort, () => {
-  console.log(`StakeClash on http://localhost:${env.gamePort}  network=${NETWORK} gemini=${env.geminiMode}`);
+  console.log(`Fortune Front on http://localhost:${env.gamePort}  network=${NETWORK} gemini=${env.geminiMode}`);
   void tick();
   setInterval(() => void tick(), 1500);
   setInterval(() => {

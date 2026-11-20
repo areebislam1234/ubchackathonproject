@@ -1,4 +1,4 @@
-// StakeClash client: boots the world, signs you in, runs the HUD and wires every screen.
+// Fortune Front client: boots the world, signs you in, runs the HUD and wires every screen.
 import { FOG_CELL, FOG_W, REALMS, TILE, generateWorld } from "/shared/world.js";
 import { api, saveToken, session } from "./api.js";
 import { sfx, sound } from "./audio.js";

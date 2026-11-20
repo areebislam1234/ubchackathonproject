@@ -99,8 +99,8 @@ export async function openEconomy(G, which) {
   }
   const live = d.chain.mode === "chain";
   const banner = live
-    ? `<div class="coach">${icon("chart", 2)} <b>On-chain.</b> Read from the StakeClash program through QuickNode (Streams, RPC backfill, WebSocket). ${fmt(d.finalized)} of ${fmt(d.events)} events finalized.</div>`
-    : `<div class="coach warn">${icon("chart", 2)} <b>Not on-chain yet.</b> ${/not deployed/.test(d.chain.reason) ? "The StakeClash program isn't deployed yet" : `The StakeClash program can't be used right now (${esc(d.chain.reason)})`}, so these numbers come from the game's own records of the same events. They switch to on-chain data, with explorer links, once the program is live.</div>`;
+    ? `<div class="coach">${icon("chart", 2)} <b>On-chain.</b> Read from the Fortune Front program through QuickNode (Streams, RPC backfill, WebSocket). ${fmt(d.finalized)} of ${fmt(d.events)} events finalized.</div>`
+    : `<div class="coach warn">${icon("chart", 2)} <b>Not on-chain yet.</b> ${/not deployed/.test(d.chain.reason) ? "The Fortune Front program isn't deployed yet" : `The Fortune Front program can't be used right now (${esc(d.chain.reason)})`}, so these numbers come from the game's own records of the same events. They switch to on-chain data, with explorer links, once the program is live.</div>`;
   const tabs = [["gold", "Gold"], ["might", "Might"], ["usdc", "USDC"]].map(([k, n]) => `<button class="chip" data-etab="${k}" aria-pressed="${tab === k}">${n}</button>`).join("");
   body.innerHTML = `
     <h2>Economic Board</h2>

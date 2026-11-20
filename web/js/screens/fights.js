@@ -45,7 +45,7 @@ function render(G, d) {
     "fights",
     `
     <h2 style="margin:0">${icon("swords", 3)} Battle board</h2>
-    <p class="sub">Every fight in the realm as it happens. When the StakeClash program on Solana decides a battle, its block number links to the transaction, so anyone can check who really won.</p>
+    <p class="sub">Every fight in the realm as it happens. When the Fortune Front program on Solana decides a battle, its block number links to the transaction, so anyone can check who really won.</p>
     <div class="chips" style="margin:8px 0"><button class="chip" data-t="recent" aria-pressed="${tab === "recent"}">Latest fights</button><button class="chip" data-t="standings" aria-pressed="${tab === "standings"}">Standings</button></div>
     ${tab === "recent" ? recent : standings}
     <p class="note">${fmt(d.total)} fights recorded · updates live</p>`,

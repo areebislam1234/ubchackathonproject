@@ -58,7 +58,7 @@ async function fetchJson<T>(url: string, ttlMs: number, timeoutOverride?: number
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { headers: { accept: "application/json", "user-agent": "StakeClash/0.1 (game server)" }, signal: ctrl.signal });
+      const res = await fetch(url, { headers: { accept: "application/json", "user-agent": "FortuneFront/0.1 (game server)" }, signal: ctrl.signal });
       const text = await res.text();
       if (res.status === 429) coolUntil.set(host, Date.now() + 60_000);
       if (!res.ok) throw new HttpError(`${host} ${res.status}`, res.status);

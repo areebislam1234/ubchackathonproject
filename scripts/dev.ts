@@ -54,7 +54,7 @@ process.on("SIGINT", () => stop(0));
 process.on("SIGTERM", () => stop(0));
 
 async function main() {
-  console.log(`\n▶ StakeClash  network=${NETWORK}  gemini=${env.geminiMode}\n`);
+  console.log(`\n▶ Fortune Front  network=${NETWORK}  gemini=${env.geminiMode}\n`);
   if (IS_LOCAL && process.argv.includes("--fresh")) fs.rmSync(networkDataDir, { recursive: true, force: true });
   if (IS_LOCAL) {
     run("chain", "localchain/rpc.ts");

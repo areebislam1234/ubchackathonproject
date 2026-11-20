@@ -1,4 +1,4 @@
-// The StakeClash indexer. QuickNode is the primary way the game reads the chain:
+// The Fortune Front indexer. QuickNode is the primary way the game reads the chain:
 //   - live:     QuickNode Streams delivers program transactions (their logs) to /webhooks/quicknode
 //   - history:  QuickNode RPC getSignaturesForAddress(program) + getTransaction fill any gaps
 //   - state:    QuickNode RPC getTokenSupply, plus a QuickNode WebSocket accountSubscribe on the mints

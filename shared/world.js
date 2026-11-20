@@ -1,4 +1,4 @@
-// StakeClash world generator. Shared by the server (to place bounties on real land) and the
+// Fortune Front world generator. Shared by the server (to place bounties on real land) and the
 // browser (to draw it), so both build the identical world from the same seed.
 //
 // The world is a 384×384-tile continent split into seven realms, one per kind of Gemini market.

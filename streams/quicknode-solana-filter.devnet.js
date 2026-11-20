@@ -1,4 +1,4 @@
-// QuickNode Streams filter for StakeClash (Solana).
+// QuickNode Streams filter for Fortune Front (Solana).
 //
 // Stream settings
 //   Chain / network : Solana · Devnet
@@ -7,9 +7,9 @@
 //   Security token  : copy into QUICKNODE_WEBHOOK_SECRET in .env
 //
 // Generate a copy with your addresses filled in: `npm run print-filter`.
-// Keeps only successful transactions that involve the game authority or a StakeClash badge mint,
+// Keeps only successful transactions that involve the game authority or a Fortune Front badge mint,
 // and returns their game memos plus badge balance changes (mints, transfers between wallets).
-// Transactions that call the StakeClash program also return its log lines, from which the game
+// Transactions that call the Fortune Front program also return its log lines, from which the game
 // decodes the program's events (Gold, Might, stakes, abilities, battles).
 //
 // It also samples network activity: one block in every NETWORK_EVERY slots gets a small summary
@@ -23,7 +23,7 @@ var WATCH_MINTS = ["4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"]; // token min
 var DEPOSIT_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"; // USDC: transfers into the authority's account are deposits
 var NETWORK_EVERY = 50; // sample one block in this many slots
 var VOTE_PROGRAM = "Vote111111111111111111111111111111111111111";
-var PROGRAM = "3bXC59d9UQihNDpY17QFbQTf9WavttgpdtfGfMRuGLAs"; // the StakeClash on-chain program
+var PROGRAM = "3bXC59d9UQihNDpY17QFbQTf9WavttgpdtfGfMRuGLAs"; // the Fortune Front on-chain program
 
 function keyOf(k) {
   return typeof k === "string" ? k : k && k.pubkey;

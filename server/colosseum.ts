@@ -403,7 +403,7 @@ export function devBotAccept(p: Player) {
 }
 
 // ── Stream confirmations ──────────────────────────────────────────────
-/** Called for each StakeClash memo the QuickNode Stream delivers. */
+/** Called for each Fortune Front memo the QuickNode Stream delivers. */
 export function applyDuelMemo(kind: string, parts: string[], signature: string, slot: number) {
   if (kind === "call") {
     const [id, playerId, commit] = parts;

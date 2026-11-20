@@ -1,4 +1,4 @@
-// StakeClash pixel art. Every sprite is a grid of palette letters ('.' = transparent).
+// Fortune Front pixel art. Every sprite is a grid of palette letters ('.' = transparent).
 // Hand-drawn sprites are strings below; trees, rocks and towers are generated from a few
 // parameters so forests don't look copy-pasted. Shared by the browser (canvas) and the
 // server (badge PNGs).

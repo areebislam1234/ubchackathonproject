@@ -1,4 +1,4 @@
-// The StakeClash on-chain program (programs/stakeclash) from the server's side: its address,
+// The Fortune Front on-chain program (programs/stakeclash) from the server's side: its address,
 // account addresses (PDAs), instruction builders and the event decoder. Borsh layouts are written
 // as schemas so encoding and decoding share one definition and mirror the Rust structs.
 import crypto from "node:crypto";
