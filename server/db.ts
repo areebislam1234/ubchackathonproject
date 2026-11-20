@@ -44,14 +44,15 @@ export type Player = {
   // The yield economy (all money in integer micro-USDC). Optional: created on first use.
   funds?: Funds;
   might?: number; // upgrade currency, from converted realized yield
-  mastery?: Record<string, number>; // Mastery rank per unit type
+  mastery?: Record<string, number>; // legacy Mastery ranks, refunded into Might at load and cleared
+  abilities?: { unlocked: string[]; loadout: string[] }; // class abilities bought with Might
   fundClaims?: Record<string, { at: number; response: unknown }>; // money requestId → result (idempotency)
   colosseum?: { duels: number; steelWins: number; foresightWins: number; mightWon: number; claims?: Record<string, { at: number; response: unknown }> };
   formation?: SavedFormation; // battle formation (also used to defend inside bounties)
 };
 
 export type FormationSlot = { unit: string; n: number } | null;
-export type Formation = { slots: FormationSlot[]; order: string; preset?: string | null };
+export type Formation = { slots: FormationSlot[]; order: string; preset?: string | null; abilities?: string[] };
 /** manual: the player placed troops by hand; otherwise the preset is re-applied to the current army. */
 export type SavedFormation = Formation & { manual: boolean };
 
@@ -189,6 +190,7 @@ export type DuelSide = {
   levels: UnitMap;
   boosts?: Record<string, number>;
   vigor?: Record<string, number>;
+  formation?: Formation; // duels fight in formations (engine 2), with the side's abilities
   power: number;
   // the call, committed on Solana as a hash before anyone fights and revealed afterwards
   call: { side: "yes" | "no"; confBps: number; priceBps: number; at: number; salt: string; commit: string };

@@ -20,6 +20,7 @@ import { gemini } from "./bounties";
 import { env, explorerTx } from "./config";
 import { db, feed, type BattleRecord, type Duel, type DuelSide, type Player, type Receipt } from "./db";
 import { oddsSeries, WINDOWS } from "./odds";
+import { attackFormation } from "./bounties";
 import { GameError, award, boostsOf, vigorOf } from "./players";
 
 const MEMO = "stakeclash:v1";
@@ -85,6 +86,7 @@ async function liveQuote(market: string) {
 }
 
 function sideFor(d: Duel, p: Player, units: Record<string, number>, call: { side: "yes" | "no"; confBps: number }, priceBps: number): DuelSide {
+  const formation = attackFormation(p, units, {});
   const boosts = boostsOf(p);
   const vigor = vigorOf(p);
   const c = { ...call, priceBps, at: now(), salt: crypto.randomBytes(8).toString("hex") };
@@ -98,6 +100,7 @@ function sideFor(d: Duel, p: Player, units: Record<string, number>, call: { side
     levels: { ...p.unitLevels },
     ...(boosts ? { boosts } : {}),
     ...(vigor ? { vigor } : {}),
+    formation,
     power: armyPower(units, p.unitLevels),
     call: { ...c, commit },
     receipt: { memo: `${MEMO}:call:${d.id}:${p.id}:${commit}`, status: "sending" },
@@ -184,18 +187,24 @@ function fight(d: Duel): BattleRecord {
   const a = d.rival!;
   const c = d.challenger;
   const seed = crypto.randomBytes(4).readUInt32LE(0);
+  // duels made before formations existed keep the original engine
+  const engine = a.formation && c.formation ? 2 : 1;
+  const af = engine === 2 ? { formation: a.formation } : {};
+  const cf = engine === 2 ? { formation: c.formation } : {};
   const result = simulate({
-    attacker: { units: a.units, levels: a.levels, boosts: a.boosts, vigor: a.vigor },
-    defender: { units: c.units, levels: c.levels, towers: 0, boosts: c.boosts, vigor: c.vigor },
+    engine,
+    attacker: { units: a.units, levels: a.levels, boosts: a.boosts, vigor: a.vigor, ...af },
+    defender: { units: c.units, levels: c.levels, towers: 0, boosts: c.boosts, vigor: c.vigor, ...cf },
     seed,
   });
   const rec: BattleRecord = {
     id: `F-${++db.data.meta.battleSeq}`,
+    ...(engine === 2 ? { engine: 2 as const } : {}),
     bounty: `duel:${d.id}`,
     at: now(),
     seed,
-    attacker: { id: a.playerId, name: a.name, units: a.units, levels: a.levels, ...(a.boosts ? { boosts: a.boosts } : {}), ...(a.vigor ? { vigor: a.vigor } : {}) },
-    defender: { id: c.playerId, name: c.name, units: c.units, levels: c.levels, towers: 0, ...(c.boosts ? { boosts: c.boosts } : {}), ...(c.vigor ? { vigor: c.vigor } : {}) },
+    attacker: { id: a.playerId, name: a.name, units: a.units, levels: a.levels, ...(a.boosts ? { boosts: a.boosts } : {}), ...(a.vigor ? { vigor: a.vigor } : {}), ...af },
+    defender: { id: c.playerId, name: c.name, units: c.units, levels: c.levels, towers: 0, ...(c.boosts ? { boosts: c.boosts } : {}), ...(c.vigor ? { vigor: c.vigor } : {}), ...cf },
     result,
   };
   db.data.battles[rec.id] = rec;

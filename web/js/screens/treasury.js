@@ -59,7 +59,7 @@ function render(G) {
     "treasury",
     `
     <h2>Treasury</h2>
-    <p class="sub">Invest USDC in coins at real market prices. When you sell for a profit, that <b>realized yield</b> converts into ${icon("bolt", 1)} <b>Might</b>, which buys Mastery for your troops. <span class="testmoney">Devnet test USDC: no real money</span></p>
+    <p class="sub">Invest USDC in coins at real market prices. When you sell for a profit, that <b>realized yield</b> converts into ${icon("bolt", 1)} <b>Might</b>, which unlocks class abilities for your army. <span class="testmoney">Devnet test USDC: no real money</span></p>
     <div class="chips" style="margin-bottom:12px">${tabs.map(([k, l]) => `<button class="chip" data-tab="${k}" aria-pressed="${tab === k}">${l}</button>`).join("")}</div>
     <div id="ttab">${{ overview, invest, deposit, withdraw, ledger }[tab](G)}</div>`,
   );
@@ -94,7 +94,7 @@ function overview() {
       <button class="btn btn-ghost" id="t-conv-all" ${d.eligible > 0 && d.cash > 0 ? "" : "disabled"}>Convert all eligible (${usd(Math.min(d.eligible, d.cash))})</button>
       <span class="note" id="t-conv-preview"></span>
     </div>
-    <p class="note">Spend Might on Mastery in the Army screen (R): +3% HP and damage per rank for a unit type, up to rank 20.</p>`;
+    <p class="note">Spend Might on class abilities in the Army screen (R): Bulwark, Volley, Revive and more. Bring up to 2 into each battle.</p>`;
 }
 
 function invest() {

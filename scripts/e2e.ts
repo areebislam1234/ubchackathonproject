@@ -373,6 +373,18 @@ try {
   ok(Math.max(...rates) - Math.min(...rates) >= 4, "with identical armies, formation and order change who wins");
   const report = simulate({ engine: 2, attacker: { formation: autoFormation(same.units, "assault"), levels: {} }, defender: { formation: autoFormation(same.units, "ranged"), levels: {} }, seed: 9 }) as any;
   ok(report.report?.factors?.length > 0 && report.report.factors.every((f: any) => typeof f.text === "string" && (f.helped === "attacker" || f.helped === "defender")), "every battle explains the factors that decided it");
+  const abArmy = { infantry: 6, archer: 8, tank: 2, support: 2 };
+  const plain = simulate({ engine: 2, attacker: { formation: autoFormation(abArmy, "ranged"), levels: {} }, defender: { formation: autoFormation(abArmy, "shieldwall"), levels: {} }, seed: 21 }) as any;
+  const plainAgain = simulate({ engine: 2, attacker: { formation: autoFormation(abArmy, "ranged"), levels: {}, abilities: [] }, defender: { formation: autoFormation(abArmy, "shieldwall"), levels: {} }, seed: 21 }) as any;
+  ok(JSON.stringify(plain) === JSON.stringify(plainAgain), "bringing no abilities leaves a battle exactly as it was");
+  const volley = simulate({ engine: 2, attacker: { formation: { ...autoFormation(abArmy, "ranged"), abilities: ["volley"] }, levels: {} }, defender: { formation: autoFormation(abArmy, "shieldwall"), levels: {} }, seed: 21 }) as any;
+  ok(volley.abilities[0][0] === "volley" && JSON.stringify(volley.result ?? volley) !== JSON.stringify(plain.result ?? plain), "abilities ride on the formation and change the battle (Volley)");
+  let revived = false;
+  for (let s = 1; s <= 30 && !revived; s++) {
+    const r = simulate({ engine: 2, attacker: { formation: autoFormation({ infantry: 4, support: 3, archer: 2 }, "shieldwall"), levels: {}, abilities: ["revive"] }, defender: { formation: autoFormation({ cavalry: 8, siege: 3 }, "assault"), levels: {} }, seed: s, record: true }) as any;
+    revived = r.events.some((e: any) => e.k === "revive");
+  }
+  ok(revived, "Revive brings a wiped-out stack back while a Support stands");
   const legacy = simulate({ attacker: { units: { infantry: 6 }, levels: {} }, defender: { units: { archer: 4 }, levels: {}, towers: 1 }, seed: 5 }) as any;
   ok(legacy.engine === undefined && typeof legacy.score === "number", "battles recorded before formations still replay with the original engine");
 
@@ -386,9 +398,16 @@ try {
   const fd = (await call(ct, "GET", "/api/funds")).body;
   ok(da.applied === 1 && db2.applied === 0 && fd.cash === 20_000_000 && fd.principal === 20_000_000, "a deposit the Stream reports is credited once, as principal");
   ok((await call(ct, "POST", "/api/funds/convert", { usdc: 1, requestId: "e2e-convert-1" })).status === 400, "principal never converts into Might (only realized yield does)");
-  await call(ct, "POST", "/api/dev/usdc", { might: 100 });
-  const ms = (await call(ct, "POST", "/api/army/mastery", { unit: "archer" })).body;
-  ok(ms.mastery.ranks.archer === 1 && ms.might === 75, "Might buys Mastery ranks (rank 1 = 25 Might)");
+  await call(ct, "POST", "/api/dev/usdc", { might: 1300 });
+  const might0 = (await call(ct, "GET", "/api/me")).body.might;
+  const ab1 = (await call(ct, "POST", "/api/army/ability", { id: "volley" })).body;
+  const ab2 = (await call(ct, "POST", "/api/army/ability", { id: "volley" })).body;
+  ok(ab1.abilities?.unlocked.includes("volley") && ab1.might === might0 - 600 && ab2.might === ab1.might, "Might unlocks an ability once (Volley = 600 Might); a repeat never charges twice");
+  ok(ab1.abilities.loadout.includes("volley"), "a new ability goes straight into the loadout while there is room");
+  ok((await call(ct, "POST", "/api/army/loadout", { abilities: ["volley", "bulwark", "rally"] })).status === 400, "a loadout holds at most 2 abilities");
+  ok((await call(ct, "POST", "/api/army/loadout", { abilities: ["revive"] })).status === 400, "only unlocked abilities can be brought");
+  ok((await call(ct, "POST", "/api/army/ability", { id: "nope" })).status === 400, "unknown abilities are refused");
+  ok((await call(ct, "POST", "/api/army/mastery", { unit: "archer" })).status === 400, "Mastery is gone (it became abilities)");
   const wd = await call(ct, "POST", "/api/funds/withdraw", { usdc: 500, requestId: "e2e-withdraw-1" });
   ok(wd.status === 400, "withdrawals over your cash, or without a verified wallet, are refused");
 
@@ -475,8 +494,8 @@ try {
   ok((await call(cara.token, "POST", `/api/colosseum/${duelId}/accept`, { units: caraArmy, side: "no", confBps: 6000, requestId: crypto.randomUUID().replace(/-/g, "") })).status === 400, "you can't accept your own challenge");
   const acc = await call(dax.token, "POST", `/api/colosseum/${duelId}/accept`, { units: daxArmy, side: "no", confBps: 6000, requestId: crypto.randomUUID().replace(/-/g, "") });
   const fought = acc.body.duel;
-  const replayDuel = simulate({ attacker: { units: acc.body.battle.attacker.units, levels: acc.body.battle.attacker.levels, boosts: acc.body.battle.attacker.boosts, vigor: acc.body.battle.attacker.vigor }, defender: acc.body.battle.defender, seed: acc.body.battle.seed });
-  ok(acc.status === 200 && fought.status === "fought" && fought.steel.pot === 190 && replayDuel.winner === acc.body.battle.result.winner, "answering fights at once; the replay matches; the steel half (190 of a 400 pot, 5% burned) goes to the winner");
+  const replayDuel = simulate({ engine: acc.body.battle.engine, attacker: { units: acc.body.battle.attacker.units, levels: acc.body.battle.attacker.levels, boosts: acc.body.battle.attacker.boosts, vigor: acc.body.battle.attacker.vigor, formation: acc.body.battle.attacker.formation }, defender: acc.body.battle.defender, seed: acc.body.battle.seed });
+  ok(acc.status === 200 && fought.status === "fought" && fought.steel.pot === 190 && replayDuel.winner === acc.body.battle.result.winner && acc.body.battle.engine === 2, "answering fights at once, in formations; the replay matches; the steel half (190 of a 400 pot, 5% burned) goes to the winner");
   const mightAfter = [(await call(cara.token, "GET", "/api/me")).body.might, (await call(dax.token, "GET", "/api/me")).body.might];
   const steelToCara = fought.steel.winner === cara.player.id;
   ok(mightAfter[0] === 800 + (steelToCara ? 190 : 0) && mightAfter[1] === 800 + (steelToCara ? 0 : 190), "Might moves exactly: both staked 200, the winner got the steel half");

@@ -6,7 +6,7 @@
 //
 // Slot index i = row * 3 + lane. Row 0 is the frontline, row 2 the backline; lanes are left,
 // centre, right. Index 9 is the defender's watchtowers, 10 a boss champion.
-import { CLASS_COUNTERS, COMBAT, COMBAT_STATS, ORDERS, UNITS, UNIT_CLASS, autoFormation } from "./rules.js";
+import { ABILITIES, CLASS_COUNTERS, COMBAT, COMBAT_STATS, ORDERS, UNITS, UNIT_CLASS, autoFormation, cleanLoadout } from "./rules.js";
 
 const B = 10000;
 const mul = (v, bps) => Math.floor((v * bps) / B);
@@ -32,6 +32,8 @@ const fracBps = (f) => Math.round((f ?? 0) * B); // boosts/vigor arrive as fract
 function makeSide(team, spec) {
   const f = spec.formation?.slots ? spec.formation : autoFormation(spec.units ?? {}, spec.preset ?? "shieldwall", spec.order ?? null);
   const order = ORDERS[spec.formation?.order ?? f.order] ? (spec.formation?.order ?? f.order) : "hold";
+  const abilities = cleanLoadout(spec.abilities ?? spec.formation?.abilities);
+  const has = (k) => abilities.includes(k);
   const slots = [];
   f.slots.forEach((s, i) => {
     if (!s || !UNITS[s.unit] || !(s.n > 0)) return;
@@ -41,7 +43,9 @@ function makeSide(team, spec) {
     const dmgBps = mul(lv, B + fracBps(spec.boosts?.[s.unit]) + fracBps(spec.boosts?.all));
     const unitHp = Math.max(1, mul(st.hp, hpBps));
     const n = Math.floor(s.n);
-    slots.push({ team, idx: i, row: Math.floor(i / 3), lane: i % 3, unit: s.unit, cls: UNIT_CLASS[s.unit], n0: n, unitHp, hpMax: unitHp * n, hp: unitHp * n, atk: mul(st.atk, dmgBps), heal: st.heal ? mul(st.heal, lv) : 0, intercept: st.intercept ?? 0, splash: st.splash ?? 0 });
+    // Bulwark: Guardians absorb more for the troops behind them
+    const intercept = (st.intercept ?? 0) + (st.intercept && has("bulwark") ? (s.unit === "tank" ? 1500 : 1000) : 0);
+    slots.push({ team, idx: i, row: Math.floor(i / 3), lane: i % 3, unit: s.unit, cls: UNIT_CLASS[s.unit], n0: n, unitHp, hpMax: unitHp * n, hp: unitHp * n, atk: mul(st.atk, dmgBps), heal: st.heal ? mul(st.heal, lv) : 0, intercept, splash: st.splash ?? 0, pinning: UNIT_CLASS[s.unit] === "ranger" && has("pinning"), breaker: UNIT_CLASS[s.unit] === "artillery" && has("siegebreaker") });
   });
   if (spec.towers > 0) {
     const t = COMBAT_STATS.tower;
@@ -52,7 +56,7 @@ function makeSide(team, spec) {
     const atk = Math.floor((c.dmg * 60) / Math.max(1, c.cooldown));
     slots.push({ team, idx: 10, row: 1, lane: 1, unit: "boss", look: c.look, cls: "boss", n0: 1, unitHp: c.hp, hpMax: c.hp, hp: c.hp, atk, heal: 0, intercept: 0, splash: c.splash > 0 ? 5000 : 0 });
   }
-  return { team, order, slots, formation: { slots: f.slots, order } };
+  return { team, order, slots, abilities, has, revived: false, formation: { slots: f.slots, order } };
 }
 
 const count = (s) => (s.hp <= 0 ? 0 : Math.floor((s.hp + s.unitHp - 1) / s.unitHp));
@@ -71,11 +75,21 @@ function pick(list, better) {
 }
 
 /** Who a slot attacks, by its class and its side's order. */
-function chooseTarget(a, order, enemy) {
-  const list = alive(enemy);
+function chooseTarget(a, order, enemy, round = 99, skip = null) {
+  const list = alive(enemy).filter((s) => s !== skip);
   if (!list.length) return null;
   const near = (x, y) => laneDist(x, a) - laneDist(y, a) || x.idx - y.idx;
   if (order === "focus") return pick(list, (x, y) => x.hp < y.hp || (x.hp === y.hp && x.idx < y.idx));
+  // Pinning Shot: Rangers go after Raider stacks first
+  if (a.cls === "ranger" && a.pinning) {
+    const r = list.filter((s) => s.cls === "raider");
+    if (r.length) return pick(r, (x, y) => near(x, y) < 0);
+  }
+  // Taunt: in the first round enemy Raiders must attack the taunting side's Guardians
+  if (a.cls === "raider" && round <= 1 && enemy.has?.("taunt")) {
+    const g = list.filter((s) => s.cls === "guardian");
+    if (g.length) return pick(g, (x, y) => near(x, y) < 0);
+  }
   if (a.cls === "raider") {
     const exp = list.filter((s) => s.row > 0 && exposed(enemy, s));
     const pool = exp.length ? exp : list.filter((s) => s.row > 0);
@@ -89,6 +103,11 @@ function chooseTarget(a, order, enemy) {
     if (g.length) return pick(g, (x, y) => x.hp < y.hp || (x.hp === y.hp && x.idx < y.idx));
     return pick(list, (x, y) => x.row - y.row || near(x, y) < 0);
   }
+  // Siege Breaker: Artillery aims at watchtowers and bosses first
+  if (a.breaker) {
+    const big = list.filter((s) => s.cls === "tower" || s.cls === "boss");
+    if (big.length) return pick(big, (x, y) => x.idx < y.idx);
+  }
   if (a.cls === "artillery" || a.cls === "boss") return pick(list, (x, y) => count(x) > count(y) || (count(x) === count(y) && (x.row < y.row || (x.row === y.row && x.idx < y.idx))));
   // Guardians engage enemy Raiders first (that is how they counter them), then the nearest enemy
   if (a.cls === "guardian") {
@@ -99,8 +118,9 @@ function chooseTarget(a, order, enemy) {
 }
 
 function newStats() {
-  return { dealt: 0, matrix: {}, counterExtra: 0, intercepted: 0, healed: 0, exposedTaken: 0, orderExtra: 0, orderTakenExtra: 0, preventedByOrder: 0, auraPrevented: 0, splashHits: 0, wiped: {}, firstLoss: null };
+  return { dealt: 0, matrix: {}, counterExtra: 0, intercepted: 0, healed: 0, exposedTaken: 0, orderExtra: 0, orderTakenExtra: 0, preventedByOrder: 0, auraPrevented: 0, splashHits: 0, wiped: {}, firstLoss: null, ab: {} };
 }
+const abStat = (st, k, v) => (st.ab[k] = (st.ab[k] ?? 0) + v);
 
 /**
  * Run a battle.
@@ -127,8 +147,19 @@ export function simulate2({ attacker, defender, seed, record = false }) {
     const loss = before - count(dst);
     const dstStats = stats[dst.team];
     if (loss > 0 && !dstStats.firstLoss && dst.cls !== "tower") dstStats.firstLoss = { unit: dst.unit, round };
-    if (dst.hp <= 0) dstStats.wiped[dst.unit] = dstStats.wiped[dst.unit] ?? round;
     if (record) events.push({ r: round, k: kind, t: src.team, from: src.idx, to: dst.idx, amount: dealt, kill: dst.hp <= 0 });
+    if (dst.hp <= 0) {
+      // Revive: once per battle the first stack wiped out comes back at 20% (and skips its next attack), while a Support still stands
+      const side = sides[dst.team];
+      if (side.has("revive") && !side.revived && dst.idx < 9 && side.slots.some((x) => x.hp > 0 && x.cls === "support")) {
+        side.revived = true;
+        dst.hp = Math.max(1, mul(dst.hpMax, 2000));
+        dst.pinned = true; // the revived stack regroups and skips its next attack
+        abStat(dstStats, "revive", dst.hp);
+        dstStats.revivedUnit = dst.unit;
+        if (record) events.push({ r: round, k: "revive", t: dst.team, from: dst.idx, to: dst.idx, amount: dst.hp, kill: false, ability: "revive" });
+      } else dstStats.wiped[dst.unit] = dstStats.wiped[dst.unit] ?? round;
+    }
     return dealt;
   };
 
@@ -157,11 +188,16 @@ export function simulate2({ attacker, defender, seed, record = false }) {
           continue;
         }
       }
-      const tgt = chooseTarget(a, mine.order, enemy);
-      if (!tgt) break;
+      const strike = (tgt, scale, firstStrikeTurn) => {
       let d = n * a.atk;
+      if (scale !== B) d = mul(d, scale); // Volley's second target
       // class counters
-      const counter = tgt.cls === "boss" && (a.unit === "siege" || a.unit === "tank") ? COMBAT.bossCounterBps : (CLASS_COUNTERS[a.cls]?.[tgt.cls] ?? B);
+      let counter = tgt.cls === "boss" && (a.unit === "siege" || a.unit === "tank") ? COMBAT.bossCounterBps : (CLASS_COUNTERS[a.cls]?.[tgt.cls] ?? B);
+      // Siege Breaker: Artillery hits towers and bosses twice as hard
+      if (a.cls === "artillery" && mine.has("siegebreaker") && (tgt.cls === "tower" || tgt.cls === "boss")) {
+        counter *= 2;
+        abStat(stats[a.team], "siegebreaker", 1);
+      }
       d = mul(d, counter);
       // the attacker's bonuses
       const isExposed = exposed(enemy, tgt);
@@ -172,7 +208,11 @@ export function simulate2({ attacker, defender, seed, record = false }) {
       if (o.dmg) orderBonus += o.dmg;
       if (mine.order === "flank") orderBonus += a.cls === "raider" ? (isExposed ? o.flankBps : 0) : o.othersBps;
       if (mine.order === "focus") orderBonus += o.focusBps;
+      // Rally: +15% for stacks sharing a lane with a living Support
+      const rallied = mine.has("rally") && mine.slots.some((x) => x.hp > 0 && x.cls === "support" && x.lane === a.lane);
+      if (rallied) atkBonus += 1500;
       d = mul(d, B + atkBonus + orderBonus);
+      if (rallied) abStat(stats[a.team], "rally", d - Math.floor((d * B) / (B + atkBonus + orderBonus)) - 0);
       d = mul(d, COMBAT.roll[0] + (next() % (COMBAT.roll[1] - COMBAT.roll[0] + 1)));
       // the target's situation
       const expBonus = isExposed ? COMBAT.exposedBps + (a.cls === "ranger" ? COMBAT.rangerExposedBps : 0) : 0;
@@ -193,7 +233,9 @@ export function simulate2({ attacker, defender, seed, record = false }) {
       // Guardians in front, in the same lane, take part of the blow
       // (Raiders striking from a wing lane slip past the Guardians: that is how they penetrate a formation)
       const penetrates = a.cls === "raider" && a.lane !== 1;
-      if (tgt.row > 0 && tgt.cls !== "guardian") {
+      // Ambush: Raiders from a wing ignore Guardian protection entirely
+      const ambush = penetrates && mine.has("ambush");
+      if (tgt.row > 0 && tgt.cls !== "guardian" && !ambush) {
         const guard = pick(
           enemy.slots.filter((s) => s.hp > 0 && s.cls === "guardian" && s.lane === tgt.lane && s.row < tgt.row),
           (x, y) => x.intercept > y.intercept || (x.intercept === y.intercept && x.row < y.row),
@@ -208,14 +250,48 @@ export function simulate2({ attacker, defender, seed, record = false }) {
           if (expBonus) guardPart = Math.floor((guardPart * B) / (B + expBonus));
           const taken = hit(a, guard, guardPart, "intercept");
           stats[tgt.team].intercepted += part;
+          if (enemy.has("bulwark")) abStat(stats[tgt.team], "bulwark", Math.floor((part * (guard.unit === "tank" ? 1500 : 1000)) / Math.max(1, share)));
           void taken;
           d -= part;
         }
       }
+      if (ambush && tgt.row > 0 && tgt.cls !== "guardian" && enemy.slots.some((x) => x.hp > 0 && x.cls === "guardian" && x.lane === tgt.lane && x.row < tgt.row)) abStat(stats[a.team], "ambush", d);
       hit(a, tgt, d, "hit");
+      if (scale !== B && !firstStrikeTurn) abStat(stats[a.team], "volley", d);
+      if (firstStrikeTurn) abStat(stats[a.team], "firststrike", d);
+      // Pinning Shot: a Raider stack hit by Rangers skips its next attack
+      if (a.cls === "ranger" && tgt.cls === "raider" && tgt.hp > 0 && mine.has("pinning") && !tgt.pinned) {
+        tgt.pinned = true;
+        abStat(stats[a.team], "pinning", 1);
+      }
       if (a.splash) {
-        const sd = mul(d, a.splash);
-        for (const s of enemy.slots) if (s.hp > 0 && s !== tgt && s.row === tgt.row && laneDist(s, tgt) === 1 && s.idx < 9) (hit(a, s, sd, "splash"), (st.splashHits += 1));
+        if (mine.has("bombardment")) {
+          // Bombardment: every other slot in the row takes 50%
+          const sd = mul(d, 5000);
+          for (const s of enemy.slots) if (s.hp > 0 && s !== tgt && s.row === tgt.row && s.idx < 9) (abStat(stats[a.team], "bombardment", hit(a, s, sd, "splash")), (st.splashHits += 1));
+        } else {
+          const sd = mul(d, a.splash);
+          for (const s of enemy.slots) if (s.hp > 0 && s !== tgt && s.row === tgt.row && laneDist(s, tgt) === 1 && s.idx < 9) (hit(a, s, sd, "splash"), (st.splashHits += 1));
+        }
+      }
+      };
+      // Pinning Shot: a pinned Raider stack loses this attack
+      if (a.pinned) {
+        a.pinned = false;
+        continue;
+      }
+      const tgt = chooseTarget(a, mine.order, enemy, round);
+      if (!tgt) break;
+      strike(tgt, B, false);
+      // Volley: Rangers also hit the next target for 25%
+      if (a.cls === "ranger" && mine.has("volley") && a.hp > 0) {
+        const second = chooseTarget(a, mine.order, enemy, round, tgt);
+        if (second) strike(second, 2500, false);
+      }
+      // First Strike: Raiders attack twice in the first round
+      if (round === 1 && a.cls === "raider" && mine.has("firststrike") && a.hp > 0) {
+        const again = chooseTarget(a, mine.order, enemy, round);
+        if (again) strike(again, 3500, true);
       }
       if (!alive(enemy).length) break;
     }
@@ -240,6 +316,7 @@ export function simulate2({ attacker, defender, seed, record = false }) {
     score: destructionPm + (attackerWon ? 300 : 0) + Math.floor(survivalPm / 5),
     lost,
     orders: [sides[0].order, sides[1].order],
+    abilities: [sides[0].abilities, sides[1].abilities],
   };
   result.report = explainBattle(result, sides, stats, survivors);
   if (record) return { ...result, events, slots: snapshot, formations: sides.map((s) => s.formation) };
@@ -276,6 +353,16 @@ export function explainBattle(result, sides, stats, survivors) {
       const pair = best ? best[0].split(">") : null;
       add(t, s.counterExtra, `${who(t)} counters added ${fmtN(s.counterExtra)} damage${pair ? ` (mostly ${CLASS_NAME[pair[0]]} into ${CLASS_NAME[pair[1]]})` : ""}.`);
     }
+    const ab = s.ab;
+    if (ab.revive) add(t, ab.revive * 2, `${who(t)} Revive brought ${UNITS[s.revivedUnit]?.name ?? "a stack"} back with ${fmtN(ab.revive)} health.`);
+    if (ab.bulwark) add(t, ab.bulwark, `${who(t)} Bulwark absorbed ${fmtN(ab.bulwark)} extra damage for the troops behind the Guardians.`);
+    if (ab.ambush) add(t, ab.ambush, `${who(t)} Ambush slipped ${fmtN(ab.ambush)} damage past the enemy's Guardians.`);
+    if (ab.firststrike) add(t, ab.firststrike, `${who(t)} First Strike dealt ${fmtN(ab.firststrike)} damage before the enemy could react.`);
+    if (ab.volley) add(t, ab.volley, `${who(t)} Volley hit second targets for ${fmtN(ab.volley)} damage.`);
+    if (ab.pinning) add(t, ab.pinning * 60, `${who(t)} Pinning Shot stopped ${ab.pinning} Raider attack${ab.pinning > 1 ? "s" : ""}.`);
+    if (ab.bombardment) add(t, ab.bombardment, `${who(t)} Bombardment shelled whole rows for ${fmtN(ab.bombardment)} damage.`);
+    if (ab.rally) add(t, ab.rally, `${who(t)} Rally added ${fmtN(ab.rally)} damage in the Support's lane.`);
+    if (ab.siegebreaker) add(t, ab.siegebreaker * 40, `${who(t)} Siege Breaker doubled Artillery damage against towers and the boss.`);
     const dive = (s.matrix["raider>ranger"] ?? 0) + (s.matrix["raider>artillery"] ?? 0) + (s.matrix["raider>support"] ?? 0);
     add(t, dive * 0.5, `${who(t)} Raiders reached the backline and dealt ${fmtN(dive)} damage to Rangers, Artillery and Support.`);
     if (s.splashHits >= 3) add(t, (s.matrix["artillery>guardian"] ?? 0) * 0.3, `${who(t)} Artillery splash hit ${s.splashHits} extra stacks in clustered rows.`);
@@ -290,6 +377,7 @@ export function explainBattle(result, sides, stats, survivors) {
     headline: result.winner === "attacker" ? "Victory" : "Defeat",
     factors: f.slice(0, 5),
     orders: sides.map((s) => ORDERS[s.order].name),
+    abilities: sides.map((s) => s.abilities.map((k) => ABILITIES[k].name)),
     yourLosses: lostTxt(0),
     theirLosses: lostTxt(1),
     rounds: result.ticks,

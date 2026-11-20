@@ -2113,3 +2113,43 @@ label.field select {
     left: 64px;
   }
 }
+
+/* ── Abilities (Might) ─────────────────────────────────────────────── */
+.ab-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+.ab-class h4 {
+  margin: 0 0 6px;
+  font: 400 18px var(--display);
+}
+.ab-card {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  margin-bottom: 6px;
+  background: var(--parch-d);
+  border: var(--px) solid var(--parch-dd);
+}
+.ab-card.have {
+  border-color: var(--crystal-l);
+}
+.ab-card.on {
+  border-color: var(--crystal);
+  background: var(--parch);
+}
+.ab-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  background: var(--night);
+  color: var(--gold-l);
+  border: var(--px) solid var(--crystal-l);
+  font: 400 16px var(--display);
+  pointer-events: none;
+  white-space: nowrap;
+}

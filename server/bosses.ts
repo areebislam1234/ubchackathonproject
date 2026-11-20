@@ -90,9 +90,11 @@ const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
  * a retried or duplicated request gets the stored result back instead of a second fight.
  */
 /** How each kind of boss arranges its guards. */
+/** Epic bosses bring the first ability that suits them, legendary bosses both. */
+const BOSS_ABILITIES: Record<string, string[]> = { ogre: ["firststrike", "rally"], golem: ["bulwark", "taunt"], wyrm: ["bombardment", "volley"], lich: ["volley", "revive"], titan: ["bulwark", "bombardment"], yeti: ["ambush", "firststrike"] };
 const BOSS_PRESET: Record<string, string> = { ogre: "assault", golem: "shieldwall", wyrm: "ranged", lich: "ranged", titan: "assault", yeti: "flanking" };
 
-export function challenge(p: Player, id: string, units: Record<string, number>, requestId: unknown, opts: { forceIntel?: string | null; plan?: { formation?: unknown; preset?: unknown; order?: unknown } } = {}) {
+export function challenge(p: Player, id: string, units: Record<string, number>, requestId: unknown, opts: { forceIntel?: string | null; plan?: { formation?: unknown; preset?: unknown; order?: unknown; abilities?: unknown } } = {}) {
   const rid = typeof requestId === "string" && REQUEST_ID.test(requestId) ? requestId : null;
   if (!rid) throw new GameError("Missing request id.");
   p.bossClaims ??= {};
@@ -111,7 +113,8 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
   const sent = formationArmy(formation);
 
   const army = bossArmy(l.boss);
-  const bossFormation = autoFormation(army.units, BOSS_PRESET[boss.look] ?? "shieldwall");
+  const bossAbilities = boss.tier === "epic" || boss.tier === "legendary" ? (BOSS_ABILITIES[boss.look] ?? []).slice(0, boss.tier === "legendary" ? 2 : 1) : [];
+  const bossFormation = { ...autoFormation(army.units, BOSS_PRESET[boss.look] ?? "shieldwall"), ...(bossAbilities.length ? { abilities: bossAbilities } : {}) };
   const seed = crypto.randomBytes(4).readUInt32LE(0);
   const boosts = boostsOf(p);
   const vigor = vigorOf(p);

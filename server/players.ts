@@ -4,7 +4,10 @@ import {
   BADGES,
   BUILDINGS,
   DRILLS,
-  MASTERY,
+  ABILITIES,
+  UNIT_CLASS,
+  MAX_LOADOUT,
+  cleanLoadout,
   ORDERS,
   PRESETS,
   PRESET_KEYS,
@@ -12,7 +15,6 @@ import {
   formationArmy,
   validFormation,
   drillBonus,
-  masteryBonus,
   masteryCost,
   MATERIAL_KEYS,
   START,
@@ -232,11 +234,10 @@ export function assignDrill(p: Player, unit: string, count = 1) {
   db.save();
   return { unit, points: d.units[unit], pool: d.pool };
 }
-/** Drills (from bosses) + Mastery (from yield): the same bonus applies to HP and damage. */
+/** Drills (from bosses): the same bonus applies to HP and damage. */
 const drillMap = (p: Player) => {
   const out: Record<string, number> = {};
   for (const [k, n] of Object.entries(p.drills?.units ?? {})) if (n > 0) out[k] = drillBonus(n);
-  for (const [k, r] of Object.entries(p.mastery ?? {})) if (r > 0) out[k] = (out[k] ?? 0) + masteryBonus(r);
   return out;
 };
 
@@ -375,7 +376,13 @@ const hashOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0))
  * they still own (casualties); a preset is re-applied to the current army. `override` comes from an
  * attack: a full formation, or a preset and/or order for this fight only.
  */
-export function fieldFormation(p: Player, override: { formation?: unknown; preset?: unknown; order?: unknown } = {}): Formation {
+export function fieldFormation(p: Player, override: { formation?: unknown; preset?: unknown; order?: unknown; abilities?: unknown } = {}): Formation {
+  const f = baseFormation(p, override);
+  const abilities = loadoutOf(p, override.abilities);
+  return abilities.length ? { ...f, abilities } : f;
+}
+
+function baseFormation(p: Player, override: { formation?: unknown; preset?: unknown; order?: unknown }): Formation {
   const order = typeof override.order === "string" && override.order in ORDERS ? override.order : null;
   if (override.formation) {
     try {
@@ -400,6 +407,71 @@ export function fieldFormation(p: Player, override: { formation?: unknown; prese
   // bots without a formation each favour a preset, so rivals fight differently
   const fallback = p.bot ? PRESET_KEYS[hashOf(p.id) % PRESET_KEYS.length] : "shieldwall";
   return autoFormation(p.army, preset ?? (saved && !saved.manual ? saved.preset : null) ?? fallback, order ?? (saved?.manual ? null : saved?.order) ?? null);
+}
+
+// ── Abilities (bought with Might) ─────────────────────────────────────
+const abilityBook = (p: Player) => (p.abilities ??= { unlocked: [], loadout: [] });
+const pickable = (p: Player, k: string) => (ABILITIES as any)[k] && abilityBook(p).unlocked.includes(k);
+
+/** The abilities a warlord brings: an override for this fight, else the saved loadout (only unlocked ones). */
+export function loadoutOf(p: Player, override?: unknown): string[] {
+  if (p.bot && !p.abilities) return botLoadout(p);
+  const list = Array.isArray(override) ? override.map(String) : abilityBook(p).loadout;
+  return cleanLoadout(list.filter((k) => pickable(p, k)));
+}
+
+/** Rival warlords bring two abilities that suit their favourite formation. */
+const BOT_LOADOUTS: Record<string, string[]> = { shieldwall: ["bulwark", "volley"], flanking: ["ambush", "rally"], ranged: ["volley", "pinning"], assault: ["firststrike", "revive"] };
+function botLoadout(p: Player) {
+  const preset = p.formation && !p.formation.manual ? p.formation.preset : PRESET_KEYS[hashOf(p.id) % PRESET_KEYS.length];
+  return BOT_LOADOUTS[preset ?? "shieldwall"] ?? [];
+}
+
+/** Unlock an ability with Might. Repeating an unlock is a no-op, so retries never charge twice. */
+export function unlockAbility(p: Player, id: string) {
+  const a = (ABILITIES as any)[id];
+  if (!a) throw new GameError("Unknown ability.");
+  const book = abilityBook(p);
+  if (book.unlocked.includes(id)) return { id, unlocked: book.unlocked, might: p.might ?? 0, already: true };
+  const classOpen = unlockedUnits(p.buildings.barracks).some((u: string) => (UNIT_CLASS as any)[u] === a.cls);
+  if (!classOpen) throw new GameError(`${a.name} needs a ${a.cls} unit. Upgrade your Barracks first.`);
+  if ((p.might ?? 0) < a.cost) throw new GameError(`${a.name} costs ${a.cost} Might (you have ${p.might ?? 0}). Convert realized yield in the Treasury.`);
+  p.might = (p.might ?? 0) - a.cost;
+  book.unlocked.push(id);
+  if (book.loadout.length < MAX_LOADOUT) book.loadout.push(id);
+  if (book.unlocked.length >= 5) award(p, "master-at-arms");
+  db.save();
+  return { id, unlocked: book.unlocked, might: p.might };
+}
+
+/** Choose which unlocked abilities to bring into battle (at most MAX_LOADOUT). */
+export function setLoadout(p: Player, list: unknown) {
+  if (!Array.isArray(list)) throw new GameError("Send a list of abilities.");
+  const want = [...new Set(list.map(String))];
+  if (want.length > MAX_LOADOUT) throw new GameError(`Bring at most ${MAX_LOADOUT} abilities.`);
+  for (const k of want) if (!pickable(p, k)) throw new GameError(`${(ABILITIES as any)[k]?.name ?? "That ability"} isn't unlocked.`);
+  abilityBook(p).loadout = want;
+  db.save();
+  return abilityBook(p).loadout;
+}
+
+/**
+ * Mastery (stat ranks bought with Might) became abilities. Refund every Might a player spent on
+ * Mastery, once, and clear the ranks. Safe to run at every start.
+ */
+export function refundMastery() {
+  let n = 0;
+  for (const p of Object.values(db.data.players)) {
+    const ranks = p.mastery;
+    if (!ranks || !Object.keys(ranks).length) continue;
+    let spent = 0;
+    for (const r of Object.values(ranks)) for (let i = 1; i <= r; i++) spent += masteryCost(i);
+    p.might = (p.might ?? 0) + spent;
+    delete p.mastery;
+    n++;
+  }
+  if (n) db.save();
+  return n;
 }
 
 /** Save a formation: a preset (re-applied as the army changes) or a hand-placed one. */
@@ -456,12 +528,7 @@ export function playerView(p: Player) {
     })(),
     might: p.might ?? 0,
     usdc: p.funds?.cash ?? 0, // micro-USDC
-    mastery: {
-      ranks: p.mastery ?? {},
-      perRank: MASTERY.perRank,
-      maxRank: MASTERY.maxRank,
-      next: Object.fromEntries(UNIT_KEYS.map((k) => [k, (p.mastery?.[k] ?? 0) < MASTERY.maxRank ? masteryCost((p.mastery?.[k] ?? 0) + 1) : null])),
-    },
+    abilities: { unlocked: p.abilities?.unlocked ?? [], loadout: loadoutOf(p), max: MAX_LOADOUT },
     drills: (() => {
       const d = drills(p);
       return { units: d.units, pool: d.pool, todayLeft: DRILLS.dailyCap - d.today, perPoint: DRILLS.perPoint, maxPerUnit: DRILLS.maxPerUnit, dailyCap: DRILLS.dailyCap };

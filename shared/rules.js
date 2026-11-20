@@ -350,15 +350,36 @@ export function bossArmy(key) {
 }
 
 // ── Army upgrades ─────────────────────────────────────────────────────
-// Two tracks make troops stronger on top of unit levels:
-//   Mastery (major): bought with the upgrade currency that realized investment yield converts into.
-//   Drills (minor): earned by defeating bosses. Capped at a quarter of Mastery, so fighting bosses
-//   is always worth it but can never replace investing.
-export const MASTERY = { perRank: 0.03, maxRank: 20, baseCost: 25, costGrowth: 1.18 }; // +3% HP and damage per rank, up to +60%
-/** Might to go from rank r-1 to rank r. */
-export const masteryCost = (rank) => Math.round(MASTERY.baseCost * MASTERY.costGrowth ** (rank - 1));
-/** HP / damage bonus fraction from Mastery ranks on one unit type. */
-export const masteryBonus = (rank) => Math.min(MASTERY.maxRank, Math.max(0, rank ?? 0)) * MASTERY.perRank;
+// Gold buys the numbers: troops, unit levels (+12% HP and damage per level) and buildings.
+// Might buys new tricks: permanent class abilities that change how a battle plays.
+// Drills (from bosses) add a small, capped stat bonus on top.
+
+/**
+ * Class abilities, unlocked once with Might. A warlord brings up to MAX_LOADOUT into each battle;
+ * an ability only does something when that class is on the field.
+ */
+export const ABILITIES = {
+  bulwark: { cls: "guardian", name: "Bulwark", cost: 600, desc: "Guardians absorb more for the troops behind them: Shieldguards 50% (from 35%), Spearmen 25% (from 15%).", counter: "Bombardment splash ignores protection." },
+  taunt: { cls: "guardian", name: "Taunt", cost: 600, desc: "In the first round, enemy Rangers and Raiders must attack your Guardians instead of diving your backline.", counter: "Focus Fire ignores it." },
+  ambush: { cls: "raider", name: "Ambush", cost: 900, desc: "Raiders striking from a wing lane ignore Guardian protection entirely.", counter: "Raiders in the centre lane still get blocked; Guardians hunt Raiders first." },
+  firststrike: { cls: "raider", name: "First Strike", cost: 600, desc: "Raiders get an extra attack at 35% strength in the first round.", counter: "Pinning Shot and an early Ranger volley." },
+  volley: { cls: "ranger", name: "Volley", cost: 600, desc: "Each Ranger attack also hits the next target for 25% damage.", counter: "Support aura and spread-out stacks." },
+  pinning: { cls: "ranger", name: "Pinning Shot", cost: 600, desc: "Your Rangers target Raider stacks first, and a Raider stack they hit skips its next attack.", counter: "First Strike lands before the pin." },
+  bombardment: { cls: "artillery", name: "Bombardment", cost: 900, desc: "Splash hits every slot in the target's row at 50% (normally just the neighbours).", counter: "Raiders diving your Artillery." },
+  siegebreaker: { cls: "artillery", name: "Siege Breaker", cost: 600, desc: "Artillery aims at watchtowers and bosses first and hits them twice as hard.", counter: "Useless against armies with no towers or boss." },
+  revive: { cls: "support", name: "Revive", cost: 900, desc: "Once per battle, the first of your stacks to be wiped out comes back at 20% health (it regroups and skips its next attack).", counter: "Kill the Support first." },
+  rally: { cls: "support", name: "Rally", cost: 600, desc: "+15% damage for your stacks in the Support's lane.", counter: "Raiders diving the Support." },
+};
+export const ABILITY_KEYS = Object.keys(ABILITIES);
+export const MAX_LOADOUT = 2;
+/** Keep only real abilities, at most MAX_LOADOUT, no repeats. */
+export const cleanLoadout = (list) => [...new Set((Array.isArray(list) ? list : []).filter((k) => k in ABILITIES))].slice(0, MAX_LOADOUT);
+
+// Mastery (+3% HP and damage per rank, bought with Might) was replaced by abilities. These numbers
+// are kept only to refund what players had already spent.
+export const LEGACY_MASTERY = { maxRank: 20, baseCost: 25, costGrowth: 1.18 };
+/** Might that Mastery rank r cost (legacy, for refunds). */
+export const masteryCost = (rank) => Math.round(LEGACY_MASTERY.baseCost * LEGACY_MASTERY.costGrowth ** (rank - 1));
 
 // ── The yield economy ─────────────────────────────────────────────────
 // Players deposit USDC, invest it in coins at real market prices, and convert realized gains (never
@@ -486,7 +507,7 @@ export const BADGES = {
   "relic-hunter": { name: "Relic Hunter", desc: "Own 3 relics.", icon: "chest" },
   spymaster: { name: "Spymaster", desc: "Collect 10 intelligence reports.", icon: "scroll" },
   "first-profit": { name: "First Profit", desc: "Realize a gain on an investment.", icon: "coin" },
-  "master-at-arms": { name: "Master-at-Arms", desc: "Raise a unit type to Mastery rank 20.", icon: "helmet" },
+  "master-at-arms": { name: "Master-at-Arms", desc: "Unlock 5 class abilities.", icon: "helmet" },
   gladiator: { name: "Gladiator", desc: "Win a Colosseum duel.", icon: "swords" },
 };
 

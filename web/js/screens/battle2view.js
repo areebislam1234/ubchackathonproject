@@ -2,7 +2,7 @@
 // in order. The browser re-runs the same deterministic battle from the record, so what you watch is
 // exactly what scored. Ends with the combat report: why the battle went the way it did.
 import { simulate2 } from "/shared/battle2.js";
-import { ORDERS, UNITS } from "/shared/rules.js";
+import { ABILITIES, ORDERS, UNITS } from "/shared/rules.js";
 import { sfx } from "../audio.js";
 import { spriteCanvas } from "../gfx.js";
 import { $, esc, fmt } from "../ui.js";
@@ -29,10 +29,11 @@ export function openBattle2(G, rec, { onDone, doneLabel = "Back", lootHtml = "" 
     seed: rec.seed,
     record: true,
   });
+  const abNames = (list) => (list ?? []).map((k) => ABILITIES[k]?.name ?? k).join(", ");
   const el = $("battle");
   el.innerHTML = `
     <div class="battle-top"><span class="blue">${esc(rec.attacker.name)} <small class="order-badge">${esc(ORDERS[sim.orders[0]]?.name ?? "")}</small></span><span class="vs">vs</span><span class="red"><small class="order-badge">${esc(ORDERS[sim.orders[1]]?.name ?? "")}</small> ${esc(rec.defender.name)}</span></div>
-    <canvas id="battle-canvas" width="${W * 4}" height="${H * 4}"></canvas>
+    <div style="position:relative"><canvas id="battle-canvas" width="${W * 4}" height="${H * 4}"></canvas><div class="ab-banner" id="b2-ab" hidden></div></div>
     <div class="battle-ctl"><span class="note" id="b2-round" style="color:#fff">Round 1</span><button class="btn btn-small btn-ghost" data-speed="1">1×</button><button class="btn btn-small btn-ghost" data-speed="2">2×</button><button class="btn btn-small btn-ghost" data-speed="4">4×</button><button class="btn btn-small btn-gold" id="b-skip">Skip to result</button></div>`;
   el.hidden = false;
   const ctx = $("battle-canvas").getContext("2d");
@@ -40,6 +41,17 @@ export function openBattle2(G, rec, { onDone, doneLabel = "Back", lootHtml = "" 
   const slots = sim.slots.map((side, team) => side.map((s) => ({ ...s, team, unitHp: Math.max(1, Math.floor(s.hpMax / s.n)), hp: s.hpMax, flash: 0, kind: "" })));
   const find = (team, idx) => slots[team].find((s) => s.idx === idx);
   const st = { i: 0, t: 0, speed: 2, shots: [], done: false };
+  let bannerTimer = 0;
+  const banner = (text) => {
+    const b = $("b2-ab");
+    if (!b) return;
+    b.textContent = text;
+    b.hidden = false;
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => (b.hidden = true), 2200);
+  };
+  const [myAb, theirAb] = sim.abilities ?? [[], []];
+  if (myAb.length || theirAb.length) banner(`Abilities: ${abNames(myAb) || "none"} vs ${abNames(theirAb) || "none"}`);
   running = st;
   for (const b of el.querySelectorAll("[data-speed]")) b.onclick = () => (st.speed = Number(b.dataset.speed));
   $("b-skip").onclick = () => {
@@ -48,9 +60,13 @@ export function openBattle2(G, rec, { onDone, doneLabel = "Back", lootHtml = "" 
   };
   function apply(e) {
     const src = find(e.t, e.from);
-    const dst = e.k === "heal" ? find(e.t, e.to) : find(1 - e.t, e.to);
+    const own = e.k === "heal" || e.k === "revive";
+    const dst = own ? find(e.t, e.to) : find(1 - e.t, e.to);
     if (!dst) return;
-    if (e.k === "heal") dst.hp = Math.min(dst.hpMax, dst.hp + e.amount);
+    if (e.k === "revive") {
+      dst.hp = e.amount;
+      banner(`${e.t === 0 ? "Your" : "Their"} ${UNITS[dst.unit]?.name ?? dst.unit} revived! (Revive)`);
+    } else if (e.k === "heal") dst.hp = Math.min(dst.hpMax, dst.hp + e.amount);
     else dst.hp = Math.max(0, dst.hp - e.amount);
     dst.flash = 1;
     dst.kind = e.k;
@@ -70,7 +86,7 @@ export function openBattle2(G, rec, { onDone, doneLabel = "Back", lootHtml = "" 
       const e = sim.events[st.i++];
       const r = apply(e);
       if (r?.src && r.dst) st.shots.push({ from: slotPos(r.src.team, r.src), to: slotPos(r.dst.team, r.dst), k: e.k, t: 0 });
-      sfx(e.k === "heal" ? "click" : e.k === "splash" ? "boom" : e.kill ? "die" : "swing");
+      sfx(e.k === "heal" || e.k === "revive" ? "click" : e.k === "splash" ? "boom" : e.kill ? "die" : "swing");
     }
     for (const side of slots) for (const s of side) (s.flash = Math.max(0, s.flash - dt * 3)), (s.swing = Math.max(0, (s.swing ?? 0) - dt * 4));
     st.shots = st.shots.filter((x) => (x.t += dt * st.speed * 3) < 1);
@@ -117,7 +133,7 @@ function draw(ctx, slots, shots) {
         ctx.drawImage(spr, Math.round(x - (spr.width * big) / 2 + ox), Math.round(y - spr.height * big + 4 + oy), spr.width * big, spr.height * big);
       }
       if (s.flash > 0) {
-        ctx.fillStyle = s.kind === "heal" ? `rgba(138,209,78,${s.flash * 0.6})` : s.kind === "intercept" ? `rgba(123,168,242,${s.flash * 0.7})` : `rgba(226,60,60,${s.flash * 0.5})`;
+        ctx.fillStyle = s.kind === "heal" || s.kind === "revive" ? `rgba(138,209,78,${s.flash * 0.6})` : s.kind === "intercept" ? `rgba(123,168,242,${s.flash * 0.7})` : `rgba(226,60,60,${s.flash * 0.5})`;
         ctx.fillRect(x - 12, y - 18 * big, 24, 20 * big);
       }
       // count and health

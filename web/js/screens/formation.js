@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { spriteUrl } from "../gfx.js";
 import { act, esc, openSheet, toast } from "../ui.js";
+import { loadoutChips } from "./abilities.js";
 
 const ROWS = ["Front", "Mid", "Back"];
 const LANES = ["Left", "Centre", "Right"];
@@ -130,7 +131,7 @@ export function openFormation(G) {
 /** Attack prep: choose this fight's formation (saved or a preset) and order. Returns the plan getter. */
 export function planPicker(G, host) {
   const m = G.me;
-  const state = { preset: null, order: m.formation.order };
+  const state = { preset: null, order: m.formation.order, abilities: [...(m.abilities?.loadout ?? [])] };
   const render = () => {
     const f = state.preset ? autoFormation(m.army, state.preset, state.order) : { ...m.formation, order: state.order };
     host.innerHTML = `
@@ -138,7 +139,15 @@ export function planPicker(G, host) {
       <div class="chips"><button class="chip" data-p="" aria-pressed="${!state.preset}">My formation</button>${PRESET_KEYS.map((k) => `<button class="chip" data-p="${k}" aria-pressed="${state.preset === k}" title="${esc(PRESETS[k].desc)}">${esc(PRESETS[k].name)}</button>`).join("")}</div>
       <div class="fgrid-wrap compact">${formationGrid(f.slots)}<div class="fpanel"><ul class="lane-notes">${laneNotes(f.slots).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div></div>
       <h3>Order</h3>
-      ${orderChips(state.order)}`;
+      ${orderChips(state.order)}
+      ${loadoutChips(m, state.abilities)}`;
+    for (const b of host.querySelectorAll("[data-abl]"))
+      b.addEventListener("click", () => {
+        const k = b.dataset.abl;
+        state.abilities = state.abilities.includes(k) ? state.abilities.filter((x) => x !== k) : [...state.abilities, k].slice(-(m.abilities?.max ?? 2));
+        sfx("click");
+        render();
+      });
     for (const b of host.querySelectorAll("[data-p]"))
       b.addEventListener("click", () => {
         state.preset = b.dataset.p || null;
@@ -150,5 +159,5 @@ export function planPicker(G, host) {
     for (const b of host.querySelectorAll("[data-order]")) b.addEventListener("click", () => ((state.order = b.dataset.order), sfx("click"), render()));
   };
   render();
-  return () => (state.preset ? { preset: state.preset, order: state.order } : { order: state.order });
+  return () => ({ ...(state.preset ? { preset: state.preset } : {}), order: state.order, abilities: state.abilities });
 }

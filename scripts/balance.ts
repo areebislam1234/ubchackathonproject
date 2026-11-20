@@ -3,9 +3,10 @@
 //   1. no army type wins too much overall, and every army type has one it beats and one it loses to
 //   2. the best formation depends on the army (no single dominant preset)
 //   3. formation and order choices move results for the same army
+//   4. every ability helps somewhere (+10 points), and no pair of abilities dominates the field
 //   npx tsx scripts/balance.ts          (SEEDS=30 for a slower, finer run)
 import { simulate2 } from "../shared/battle2.js";
-import { ORDER_KEYS, PRESETS, PRESET_KEYS, UNIT_KEYS, autoFormation } from "../shared/rules.js";
+import { ABILITIES, ABILITY_KEYS, ORDER_KEYS, PRESETS, PRESET_KEYS, UNIT_KEYS, autoFormation, bossArmy } from "../shared/rules.js";
 
 const SEEDS = Number(process.env.SEEDS ?? 12);
 const LEVEL = Object.fromEntries(UNIT_KEYS.map((k) => [k, 3]));
@@ -18,8 +19,8 @@ export const COMPS: Record<string, Record<string, number>> = {
   siege: { infantry: 4, tank: 2, archer: 6, siege: 5 },
 };
 
-type Side = { comp: string; preset: string; order?: string };
-const spec = (s: Side) => ({ formation: autoFormation(COMPS[s.comp], s.preset, s.order ?? null), levels: LEVEL });
+type Side = { comp: string; preset: string; order?: string; abilities?: string[]; towers?: number };
+const spec = (s: Side) => ({ formation: autoFormation(COMPS[s.comp], s.preset, s.order ?? null), levels: LEVEL, abilities: s.abilities ?? [], towers: s.towers ?? 0 });
 
 /** Share of games X wins against Y, playing both as attacker and as defender. */
 export function winShare(x: Side, y: Side, seeds = SEEDS) {
@@ -28,6 +29,15 @@ export function winShare(x: Side, y: Side, seeds = SEEDS) {
     if (simulate2({ attacker: spec(x), defender: spec(y), seed: i * 7919 }).winner === "attacker") w++;
     if (simulate2({ attacker: spec(y), defender: spec(x), seed: i * 104729 }).winner === "defender") w++;
   }
+  return w / (2 * seeds);
+}
+
+/** Share of fights X wins against a legendary boss (the Grand Champion and its escort). */
+function bossShare(x: Side, seeds = SEEDS) {
+  const army = bossArmy("grand-champion");
+  const boss = { ...army, formation: autoFormation(army.units, "assault") };
+  let w = 0;
+  for (let i = 1; i <= seeds * 2; i++) if (simulate2({ attacker: spec(x), defender: boss, seed: i * 7919 }).winner === "attacker") w++;
   return w / (2 * seeds);
 }
 
@@ -83,6 +93,53 @@ function main() {
   const spread = Math.max(...rates) - Math.min(...rates);
   console.log(`  spread between the best and worst choice: ${pct(spread)}`);
   if (spread < 0.25) fail("formation and order choices barely matter");
+
+  // 4. abilities: one ability against the same army and formation without it
+  console.log("\nAbilities: win share gained by bringing one ability (same army and formation, opponent brings none)");
+  console.log("".padEnd(14) + comps.map((k) => k.padStart(11)).join(""));
+  const useful: Record<string, string[]> = Object.fromEntries(comps.map((c) => [c, []]));
+  for (const k of ABILITY_KEYS) {
+    // Siege Breaker only matters against towers and bosses, so test it against a legendary boss
+    const vsBoss = k === "siegebreaker";
+    const gains = comps.map((c) => {
+      const base = { comp: c, preset: best[c] };
+      if (vsBoss) return bossShare({ ...base, abilities: [k] }) - bossShare(base);
+      return winShare({ ...base, abilities: [k] }, base) - winShare(base, base);
+    });
+    const name = (ABILITIES as Record<string, { name: string }>)[k].name;
+    console.log(`  ${name}`.padEnd(14) + gains.map((g) => `${g >= 0 ? "+" : ""}${Math.round(g * 100)}`.padStart(11)).join("") + (vsBoss ? "   (vs the Grand Champion)" : ""));
+    if (Math.max(...gains) < 0.1) fail(`${name} never helps by 10 points`);
+    if (!vsBoss) comps.forEach((c, i) => gains[i] >= 0.05 && useful[c].push(k));
+  }
+
+  // 5. ability pairs: for each army, every pair of the abilities that help it, round robin. Mirror
+  // matches are knife-edge (a small edge wins most games), so the goal checked is that the best
+  // loadout depends on the army: no single pair is the top pick everywhere.
+  console.log("\nAbility pairs: same army and formation, each useful pair against the other useful pairs");
+  const pairSeeds = Math.max(4, Math.round(SEEDS / 3));
+  const tops: string[] = [];
+  for (const c of comps) {
+    const ks = useful[c];
+    const pairs: string[][] = [];
+    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) pairs.push([ks[i], ks[j]]);
+    if (pairs.length < 3) {
+      console.log(`  ${c.padEnd(10)} (only ${ks.length} useful abilities: ${ks.join(", ") || "none"})`);
+      continue;
+    }
+    const score = new Map<string, number[]>(pairs.map((p) => [p.join("+"), []]));
+    const side = (abilities: string[]) => ({ comp: c, preset: best[c], abilities });
+    for (let i = 0; i < pairs.length; i++)
+      for (let j = i + 1; j < pairs.length; j++) {
+        const w = winShare(side(pairs[i]), side(pairs[j]), pairSeeds);
+        score.get(pairs[i].join("+"))!.push(w);
+        score.get(pairs[j].join("+"))!.push(1 - w);
+      }
+    const ranked = [...score].map(([k, v]) => [k, mean(v)] as const).sort((a, b) => b[1] - a[1]);
+    console.log(`  ${c.padEnd(10)} strongest ${ranked.slice(0, 3).map(([k, v]) => `${k} ${pct(v)}`).join(", ")} · weakest ${ranked.at(-1)![0]} ${pct(ranked.at(-1)![1])}`);
+    tops.push(ranked[0][0]);
+  }
+  console.log(`  best loadout per army: ${tops.join(", ")}`);
+  if (tops.length > 1 && new Set(tops).size === 1) fail(`the ${tops[0]} loadout is the best pick for every army`);
 
   console.log(ok ? "\nbalance goals met" : "\nbalance goals NOT met");
   process.exitCode = ok ? 0 : 1;

@@ -326,7 +326,7 @@ export function opponents(p: Player, id: string) {
 
 const LOOT = { common: 40, rare: 70, epic: 110 };
 
-export function attack(p: Player, id: string, opponentId: string, units: Record<string, number>, plan: { formation?: unknown; preset?: unknown; order?: unknown } = {}) {
+export function attack(p: Player, id: string, opponentId: string, units: Record<string, number>, plan: { formation?: unknown; preset?: unknown; order?: unknown; abilities?: unknown } = {}) {
   const b = db.data.bounties[id];
   if (!b) throw new GameError("No such bounty.", 404);
   if (b.status !== "active") throw new GameError(b.status === "upcoming" ? "The bounty hasn't started yet." : "This bounty's battles are over.");
@@ -355,7 +355,7 @@ export function attack(p: Player, id: string, opponentId: string, units: Record<
  * The formation for an attack: a full formation from the client, a preset/order for this fight, or
  * the player's saved formation. An older client sending only `units` gets them auto-placed.
  */
-export function attackFormation(p: Player, units: Record<string, number> | undefined, plan: { formation?: unknown; preset?: unknown; order?: unknown }) {
+export function attackFormation(p: Player, units: Record<string, number> | undefined, plan: { formation?: unknown; preset?: unknown; order?: unknown; abilities?: unknown }) {
   if (!plan.formation && units && Object.keys(units).length && !plan.preset) {
     const sent: Record<string, number> = {};
     for (const k of UNIT_KEYS) {
@@ -364,8 +364,9 @@ export function attackFormation(p: Player, units: Record<string, number> | undef
       if (n) sent[k] = n;
     }
     if (!Object.keys(sent).length) throw new GameError("Send at least one unit.");
-    const base = fieldFormation(p, { order: plan.order });
-    return autoFormation(sent, base.preset ?? "shieldwall", base.order);
+    const base = fieldFormation(p, { order: plan.order, abilities: plan.abilities });
+    const f = autoFormation(sent, base.preset ?? "shieldwall", base.order);
+    return base.abilities ? { ...f, abilities: base.abilities } : f;
   }
   const f = fieldFormation(p, plan);
   if (!f.slots.some(Boolean)) throw new GameError("Train some units first.");

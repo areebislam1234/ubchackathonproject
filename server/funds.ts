@@ -7,7 +7,7 @@
 //   - trades fill at the live bid/ask fetched on the server, never at a price the client sends
 //   - every money action carries a request id: a retried request returns the stored result
 import crypto from "node:crypto";
-import { ECONOMY, MASTERY, UNITS, masteryCost } from "../shared/rules.js";
+import { ECONOMY } from "../shared/rules.js";
 import { db, feed, type Funds, type LedgerEntry, type Player } from "./db";
 import { GameError, award } from "./players";
 import { getJson } from "./intel/http";
@@ -106,7 +106,7 @@ export function fundsView(p: Player, qs: Quote[] = []) {
     unrealized: positions.reduce((s, x) => s + (x.unrealized ?? 0), 0),
     positions,
     might: p.might ?? 0,
-    mastery: p.mastery ?? {},
+    abilities: p.abilities?.unlocked ?? [],
     mightPerUsdc: ECONOMY.mightPerUsdc,
     executor: executor.name,
     ledger: f.ledger.slice(-60).reverse(),
@@ -188,20 +188,6 @@ export function convert(p: Player, usdcIn: unknown, requestId: unknown) {
   return remember(p, requestId as string, { ok: true, might, funds: fundsView(p) });
 }
 
-export function buyMastery(p: Player, unit: string) {
-  const u = (UNITS as any)[unit];
-  if (!u) throw new GameError("Unknown unit.");
-  p.mastery ??= {};
-  const rank = p.mastery[unit] ?? 0;
-  if (rank >= MASTERY.maxRank) throw new GameError(`${u.name} Mastery is maxed.`);
-  const cost = masteryCost(rank + 1);
-  if ((p.might ?? 0) < cost) throw new GameError(`Rank ${rank + 1} costs ${cost} Might (you have ${p.might ?? 0}). Convert realized yield in the Treasury.`);
-  p.might = (p.might ?? 0) - cost;
-  p.mastery[unit] = rank + 1;
-  if (rank + 1 >= MASTERY.maxRank) award(p, "master-at-arms");
-  db.save();
-  return { unit, rank: rank + 1, might: p.might };
-}
 
 // ── Deposits ──────────────────────────────────────────────────────────
 function depositBook() {

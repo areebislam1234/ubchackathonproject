@@ -53,23 +53,52 @@ Every battle is fought between two **3x3 formations**: front, mid and back rows 
 - **Combat report:** every battle ends with the 3–5 factors that decided it, for example "Your Shieldguards absorbed 1,240 damage aimed at the troops behind them". Green factors helped you; red ones helped the enemy.
 - **Compatibility:**
   - Camp guardians, rival warlords and boss escorts all fight in formations.
-  - Unit levels, Mastery, Drills and relics still scale HP and damage.
+  - Unit levels, Drills and relics still scale HP and damage.
   - Battles recorded before formations existed replay with the original engine.
 - **Balance:** `npx tsx scripts/balance.ts` plays every army type and preset against each other at equal size. It checks that:
   - no army type dominates
   - every army type has a counter
   - the best formation depends on the army
   - formation and order choices swing results for the same army
+  - every ability helps some army by at least 10 points, and no single ability pair is the best loadout for every army
+
+## Gold and Might: two currencies, two jobs
+
+- **Gold buys the numbers:** training troops, unit levels (+12% HP and damage per level, capped by the Training Grounds), buildings and bounty entry.
+- **Might buys new tricks:** permanent **class abilities** that change how a battle plays. Might comes only from realized investment yield (and Colosseum winnings), so it's scarce on purpose.
+- **Drills** (from bosses) are the small, capped stat bonus on top.
+
+### Class abilities (Army, R)
+Each ability is unlocked once with Might. Before each fight you **bring up to 2**; your saved loadout also defends you inside bounties. An ability only works if that class is on the field. Attack prep (bounties and lairs) lets you change the loadout for one fight.
+
+| Class | Ability | Might | Effect |
+|---|---|---|---|
+| Guardians | Bulwark | 600 | Shieldguards absorb 50% (from 35%), Spearmen 25% (from 15%) for the troops behind them |
+| Guardians | Taunt | 600 | In the first round, enemy Raiders must attack your Guardians instead of diving your backline |
+| Raiders | Ambush | 900 | Raiders striking from a wing lane ignore Guardian protection entirely |
+| Raiders | First Strike | 600 | Raiders get an extra attack at 35% strength in round 1 |
+| Rangers | Volley | 600 | Each Ranger attack also hits the next target for 25% |
+| Rangers | Pinning Shot | 600 | Rangers target Raiders first; a Raider stack they hit skips its next attack |
+| Artillery | Bombardment | 900 | Splash hits every slot in the target's row at 50% |
+| Artillery | Siege Breaker | 600 | Artillery aims at watchtowers and bosses first and hits them twice as hard |
+| Support | Revive | 900 | Once per battle, your first wiped-out stack returns at 20% (and skips its next attack) while a Support stands |
+| Support | Rally | 600 | +15% damage for your stacks in the Support's lane |
+
+- All ten cost 7,200 Might (about 72 USDC of realized yield).
+- The battle replay shows which abilities each side brought, and the combat report says what they did ("Your Chaplains revived your Archers").
+- **NPCs bring them too:** epic bosses bring one ability that suits them and legendary bosses bring two. Rival warlords pick a loadout to match their favourite formation. Camp guardians bring none.
+- **Mastery became abilities.** Mastery (+3% per rank, bought with Might) was removed. Every player's Mastery spend was refunded in Might once, when the server started.
+- Numbers live in `shared/rules.js` (`ABILITIES`, `MAX_LOADOUT`). The effects use integer math in `shared/battle2.js`, so they can move on-chain unchanged.
 
 ## The yield economy (Treasury, T)
 
-Troops grow strongest through **Mastery**, paid for with **Might**. Might comes only from real investment results. Everything runs on **devnet test USDC: no real money**.
+Realized investment yield becomes **Might**, which unlocks class abilities. Might comes only from real investment results. Everything runs on **devnet test USDC: no real money**.
 
 1. **Deposit.** In the Treasury, create a deposit link and open it in Phantom. It's a Solana Pay request to send devnet USDC (free at faucet.circle.com) to the game's USDC account. The QuickNode Stream sees the transfer and the game credits it once. The link's reference key or your verified linked wallet matches the deposit to you.
 2. **Invest.** Buy BTC, ETH, SOL, XRP, DOGE or HYPE at the live Gemini ask; sell at the bid. Positions are recorded at real prices with test money; there is no made-up APY.
 3. **Realize.** Selling above your average cost is realized yield; selling below is a realized loss. The Overview keeps principal, cash, market value, unrealized and realized gains apart.
 4. **Convert.** Only realized yield converts, at **1 USDC = 100 Might** (configurable in `shared/rules.js` `ECONOMY`). Principal never converts, and losses reduce what's eligible.
-5. **Upgrade.** Mastery adds +3% HP and damage per rank to a unit type, up to rank 20 (+60%). Rank r costs 25 × 1.18^(r−1) Might, about 37 USDC of realized yield to max one unit type. Bosses give the smaller Drills track (+15% max).
+5. **Unlock.** Spend Might on class abilities in the Army screen (600 or 900 Might each). Gold still pays for troops and levels; bosses give the small Drills track (+15% max).
 6. **Withdraw.** Cash goes back to your verified linked wallet as a USDC transfer. A failed transfer is refunded.
 
 Money only changes on the server, in integer micro-USDC, and every money action carries a request id, so a retried request never doubles it.
@@ -103,7 +132,7 @@ Away from the bounties, **21 bosses** guard fixed lairs across the seven realms.
 - **Battles** use the same deterministic simulator as bounties: your army against the boss's guards plus the boss itself as one huge champion unit. Siege and Tanks hit bosses hard; arrows barely scratch them. Units that fall are lost.
 - **Fair play.** Rewards are rolled and paid on the server. You must stand at the lair, and every attempt (won or lost) sends the boss back to its den for a while (5 to 60 minutes by tier). Each challenge carries a request id, so a retried or duplicated request returns the stored result instead of fighting or paying twice.
 - **Bosses give no gold.** Their reward is a **minor army upgrade**: drill points, assigned in the Army screen (R). Each point gives one unit type +0.5% HP and damage, up to 30 points (+15%) per unit. At most 12 points can be earned per day.
-- **Drills are deliberately capped below Mastery,** the major upgrade track bought with the currency realized investment yield converts into (+3% per rank, up to +60%). Fighting bosses is always worth it, but it never replaces investing.
+- **Drills are deliberately small** next to unit levels (Gold) and abilities (Might, from realized investment yield). Fighting bosses is always worth it, but it never replaces investing.
 - **Relics** (epic and legendary bosses) are permanent: extra vault capacity, extra watchtowers when rivals attack you, or damage bonuses the battle simulator applies.
 - **The Bag (B)** shows your drill pool and relics. Materials, training manuals and upgrade scrolls earned before this change still work, but bosses no longer drop them.
 - **Badges:** Boss Slayer, Giant Killer (a legendary), Relic Hunter (3 relics) and Spymaster (10 reports) mint like the others.
@@ -137,7 +166,7 @@ Rarity sets the depth: a common report has one section, a legendary one has ever
 1. **Issue a challenge.** Pick an open market (each shows its live odds, last-hour move and a chart), make your call, choose a stake and an army. The stake is held in escrow.
 2. **Your call is committed on Solana at once**, before anyone fights. The game posts a memo `stakeclash:v1:call:<duel>:<player>:<sha256>`, where the hash covers the duel, player, market, side, confidence, **the Gemini price at that moment**, the time and a random salt. Your rival sees only the hash.
 3. **Answer a challenge.** Another warlord (or, after 25 seconds, a rival warlord bot with its own trading style: momentum or contrarian) answers with their army and their own committed call.
-4. **Steel.** The armies fight at once in the deterministic battle simulator; the replay is the fight that scored. The winner takes the **steel half** of the pot. Arena fights are to first blood: no units are lost.
+4. **Steel.** The armies fight at once in formations (each side's saved preset and order, with its ability loadout); the replay is the fight that scored. The winner takes the **steel half** of the pot. Arena fights are to first blood: no units are lost.
 5. **Foresight.** The other half waits for Gemini to settle the market, then goes to the **better-calibrated call** (lower Brier score). Equal calls split it. 5% of each pot is burned so Might doesn't inflate.
 6. **Sealed result.** On settlement the full result (both calls with their salts, the battle seed and winner, the outcome and payouts) is hashed and posted as `stakeclash:v1:duel:<duel>:<sha256>`.
 
@@ -346,7 +375,7 @@ Switch Phantom to Devnet (Settings → Developer settings), then link it from Pr
 |---|---|
 | `shared/` | Formation battle engine (`battle2.js`), world generator, pixel-art sprites, battle simulator and game rules. These are the same files in the browser and on the server. |
 | `server/` | API, bounty director, players and economy, boss lairs and loot (`bosses.ts`), JSON database, Solana (`chain/solana.ts`), Stream handling (`chain/stream.ts`) |
-| `server/funds.ts`, `server/chain/usdc.ts` | The yield economy: ledger, trades, conversion, Mastery, USDC deposits and withdrawals |
+| `server/funds.ts`, `server/chain/usdc.ts` | The yield economy: ledger, trades, conversion into Might, USDC deposits and withdrawals |
 | `server/odds.ts` | Odds history from Gemini prices, movers, the town crier, hot bounties |
 | `server/colosseum.ts` | Colosseum duels: escrow, the fight, foresight settlement, odds receipts and sealed results |
 | `server/intel/` | Intelligence reports: market selection, scenario parsing, the data providers and report assembly |
