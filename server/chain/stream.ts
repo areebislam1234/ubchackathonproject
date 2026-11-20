@@ -1,7 +1,7 @@
 // Handles QuickNode Streams deliveries: verified, de-duplicated by transaction signature, then
 // applied to the game (badges confirmed on-chain, bounty results sealed, badge holdings tracked).
 import { BADGES } from "../../shared/rules.js";
-import { db, feed, type ChainEvent } from "../db";
+import { db, feed, type ChainEvent, type NetworkSample } from "../db";
 import { badgeMints, MEMO_PREFIX } from "./solana";
 
 export type StreamEvent = { signature: string; slot: number; blockTime: number | null; memos: string[]; badges: { mint: string; owner: string; pre: number; post: number }[] };
@@ -17,6 +17,36 @@ export function extractEvents(body: unknown): StreamEvent[] {
   };
   visit(body);
   return out;
+}
+
+/** Network samples from the filter's output ({ events, network: [...] }, or a batch of those). */
+export function extractNetwork(body: unknown): Omit<NetworkSample, "receivedAt">[] {
+  const out: Omit<NetworkSample, "receivedAt">[] = [];
+  const visit = (x: any) => {
+    if (!x) return;
+    if (Array.isArray(x)) return x.forEach(visit);
+    if (Array.isArray(x.network)) for (const n of x.network) if (Number.isInteger(n?.slot) && Number.isFinite(n?.txCount)) out.push(n);
+  };
+  visit(body);
+  return out;
+}
+
+/** Keep a rolling window of sampled blocks, one per slot (redeliveries are ignored). */
+export function applyNetwork(samples: Omit<NetworkSample, "receivedAt">[]) {
+  if (!samples.length) return 0;
+  const list = (db.data.chain.network ??= []);
+  const have = new Set(list.map((s) => s.slot));
+  let added = 0;
+  for (const s of samples) {
+    if (have.has(s.slot)) continue;
+    have.add(s.slot);
+    list.push({ slot: s.slot, blockTime: s.blockTime ?? null, txCount: s.txCount, failed: s.failed ?? 0, vote: s.vote ?? 0, programs: s.programs ?? {}, transfers: s.transfers ?? {}, receivedAt: Date.now() });
+    added++;
+  }
+  list.sort((a, b) => a.slot - b.slot);
+  if (list.length > 500) list.splice(0, list.length - 500);
+  db.save();
+  return added;
 }
 
 export function applyEvents(events: StreamEvent[]) {

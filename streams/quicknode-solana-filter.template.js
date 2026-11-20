@@ -9,22 +9,78 @@
 // Generate a copy with your addresses filled in: `npm run print-filter`.
 // Keeps only successful transactions that involve the game authority or a StakeClash badge mint,
 // and returns their game memos plus badge balance changes (mints, transfers between wallets).
+//
+// It also samples network activity: one block in every NETWORK_EVERY slots gets a small summary
+// (transaction counts, failure rate, busiest programs, watched-token transfers) for the game's
+// crypto intelligence reports. Every other block still returns nothing unless it has game events.
 
 var AUTHORITY = "__AUTHORITY__";
 var MINTS = __MINTS__;
 var MEMO_RE = /Memo \(len \d+\): "(.*)"$/;
+var WATCH_MINTS = __WATCH_MINTS__; // token mints whose transfers are counted in network samples
+var NETWORK_EVERY = __NETWORK_EVERY__; // sample one block in this many slots
+var VOTE_PROGRAM = "Vote111111111111111111111111111111111111111";
 
 function keyOf(k) {
   return typeof k === "string" ? k : k && k.pubkey;
 }
 
+/** A compact summary of one block's activity. */
+function networkSample(block, slot) {
+  var txs = block.transactions || [];
+  var sample = { slot: slot, blockTime: block.blockTime || null, txCount: txs.length, failed: 0, vote: 0, programs: {}, transfers: {} };
+  for (var t = 0; t < txs.length; t++) {
+    var tx = txs[t];
+    var meta = tx.meta || {};
+    if (meta.err) sample.failed++;
+    var msg = (tx.transaction && tx.transaction.message) || {};
+    var keys = (msg.accountKeys || msg.staticAccountKeys || []).map(keyOf);
+    var ixs = msg.instructions || [];
+    var isVote = false;
+    for (var x = 0; x < ixs.length; x++) {
+      var ix = ixs[x] || {};
+      var pid = ix.programId || (typeof ix.programIdIndex === "number" ? keys[ix.programIdIndex] : null);
+      if (!pid) continue;
+      if (pid === VOTE_PROGRAM) isVote = true;
+      sample.programs[pid] = (sample.programs[pid] || 0) + 1;
+    }
+    if (isVote) sample.vote++;
+    var pre = {};
+    var bals = meta.preTokenBalances || [];
+    for (var i = 0; i < bals.length; i++) if (WATCH_MINTS.indexOf(bals[i].mint) >= 0) pre[bals[i].accountIndex] = Number(bals[i].uiTokenAmount && bals[i].uiTokenAmount.uiAmount) || 0;
+    var post = meta.postTokenBalances || [];
+    for (var j = 0; j < post.length; j++) {
+      var b = post[j];
+      if (WATCH_MINTS.indexOf(b.mint) < 0) continue;
+      var delta = (Number(b.uiTokenAmount && b.uiTokenAmount.uiAmount) || 0) - (pre[b.accountIndex] || 0);
+      if (delta <= 0) continue;
+      if (!sample.transfers[b.mint]) sample.transfers[b.mint] = { count: 0, amount: 0 };
+      sample.transfers[b.mint].count++;
+      sample.transfers[b.mint].amount += delta;
+    }
+  }
+  // keep the five busiest programs, so the payload stays small
+  var top = Object.keys(sample.programs)
+    .sort(function (a, b) {
+      return sample.programs[b] - sample.programs[a];
+    })
+    .slice(0, 5);
+  var programs = {};
+  for (var k = 0; k < top.length; k++) programs[top[k]] = sample.programs[top[k]];
+  sample.programs = programs;
+  return sample;
+}
+
 function main(stream) {
   var blocks = Array.isArray(stream.data) ? stream.data : [stream.data];
   var events = [];
+  var network = [];
   for (var b = 0; b < blocks.length; b++) {
     var block = blocks[b];
     if (!block || !block.transactions) continue;
     var slot = block.slot != null ? block.slot : block.parentSlot != null ? block.parentSlot + 1 : stream.metadata && stream.metadata.batch_start_range;
+    // blocks the local relay builds from single transactions are marked partial: never sample those
+    if (!block.partial && NETWORK_EVERY > 0 && slot % NETWORK_EVERY === 0) network.push(networkSample(block, slot));
     for (var t = 0; t < block.transactions.length; t++) {
       var tx = block.transactions[t];
       var meta = tx.meta;
@@ -68,5 +124,8 @@ function main(stream) {
       events.push({ signature: tx.transaction.signatures[0], slot: slot, blockTime: block.blockTime || null, memos: memos, badges: badgeChanges });
     }
   }
-  return events.length ? { events: events } : null;
+  if (!events.length && !network.length) return null;
+  var out = { events: events };
+  if (network.length) out.network = network;
+  return out;
 }

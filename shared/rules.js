@@ -289,6 +289,7 @@ function weighted(rnd, weights) {
 export function rollLoot(tier, rnd, { owned = {}, forceIntel = null } = {}) {
   const t = BOSS_TIERS[tier];
   const L = t.loot;
+  /** @type {{ gold: number, materials: Record<string, number>, manuals: Record<string, number>, scrolls: number, relic: string | null, intel: { rarity: string } | null }} */
   const loot = { gold: between(rnd, L.gold), materials: {}, manuals: {}, scrolls: 0, relic: null, intel: null };
   const nMat = between(rnd, L.materials);
   for (let i = 0; i < nMat; i++) {

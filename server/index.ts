@@ -10,9 +10,10 @@ import { db, type Player } from "./db";
 import { GameError, bySession, disband, logout, markExplored, onBadge, playerView, register, signIn, train, upgradeBuilding, upgradeUnit } from "./players";
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, tick, world } from "./bounties";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
-import { challenge, discoverLairs, lairView, lairsFor } from "./bosses";
+import { challenge, devNextIntel, discoverLairs, lairView, lairsFor } from "./bosses";
+import { intelList, reportView, resumeCompiling } from "./intel/reports";
 import { badgeMints, chainStatus, claimAll, holdingsFor, linkWallet, loadAuthority, mintBadge, sealResults, unlinkWallet, verifyWalletSignature, walletChallenge } from "./chain/solana";
-import { applyEvents, extractEvents } from "./chain/stream";
+import { applyEvents, applyNetwork, extractEvents, extractNetwork } from "./chain/stream";
 import { encodePng } from "./png";
 
 // When a badge is earned with a wallet linked, mint it; results get sealed on-chain.
@@ -39,7 +40,8 @@ app.post("/webhooks/quicknode", express.raw({ type: "*/*", limit: "25mb" }), (re
   }
   const events = extractEvents(body);
   const applied = applyEvents(events);
-  res.json({ ok: true, received: events.length, applied });
+  const network = applyNetwork(extractNetwork(body)); // sampled blocks for crypto intel
+  res.json({ ok: true, received: events.length, applied, network });
 });
 
 app.use(express.json({ limit: "1mb" }));
@@ -160,6 +162,18 @@ app.post(
   }),
 );
 
+// ── Intelligence reports ──────────────────────────────────────────────
+app.get("/api/intel", auth, wrap((req) => ({ reports: intelList(req.player).map(reportView).reverse() })));
+app.get(
+  "/api/intel/:id",
+  auth,
+  wrap((req) => {
+    const r = intelList(req.player).find((x) => x.id === String(req.params.id));
+    if (!r) throw new GameError("No such report.", 404);
+    return reportView(r);
+  }),
+);
+
 // ── Fortress and army ─────────────────────────────────────────────────
 app.post("/api/fortress/upgrade", auth, wrap((req) => upgradeBuilding(req.player, String(req.body?.building), { useMaterials: req.body?.useMaterials === true })));
 app.post("/api/army/train", auth, wrap((req) => train(req.player, String(req.body?.unit), Number(req.body?.count ?? 1))));
@@ -247,6 +261,27 @@ app.post("/api/dev/reveal", devOnly, auth, wrap((req) => (revealAll(req.player),
 app.post("/api/dev/clear-combat", devOnly, auth, wrap((req) => (clearCombat(req.player), playerView(req.player))));
 app.post("/api/dev/badge", devOnly, auth, wrap((req) => (grantBadge(req.player, String(req.body?.badge)), playerView(req.player))));
 app.post("/api/dev/reset", devOnly, auth, wrap((req) => (resetProgress(req.player), playerView(req.player))));
+app.post(
+  "/api/dev/next-intel",
+  devOnly,
+  auth,
+  wrap((req) => {
+    const r = String(req.body?.rarity ?? "");
+    if (r && !["common", "rare", "epic", "legendary"].includes(r)) throw new GameError("Unknown rarity.");
+    r ? devNextIntel.set(req.player.id, r) : devNextIntel.delete(req.player.id);
+    return { next: r || null };
+  }),
+);
+app.post(
+  "/api/dev/boss-cooldowns",
+  devOnly,
+  auth,
+  wrap((req) => {
+    if (req.player.bosses) req.player.bosses.cooldowns = {};
+    db.save();
+    return { ok: true };
+  }),
+);
 app.get("/api/dev/bounties", devOnly, auth, wrap(() => ({ bounties: devList(), now: Date.now() })));
 app.post(
   "/api/dev/spawn",
@@ -334,6 +369,8 @@ app.listen(env.gamePort, () => {
   console.log(`StakeClash on http://localhost:${env.gamePort}  network=${NETWORK} gemini=${env.geminiMode}`);
   void tick();
   setInterval(() => void tick(), 1500);
+  resumeCompiling();
+  console.log(`intel: ${env.intel ? "live sources (sample data when unreachable)" : "off, sample data only"}`);
 });
 process.on("SIGTERM", () => {
   db.flush();

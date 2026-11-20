@@ -7,6 +7,8 @@ import { FOG_CELL, FOG_W, REALMS, SIGHT } from "../shared/world.js";
 import { lairs } from "./bounties";
 import { db, feed, type BattleRecord, type Player } from "./db";
 import { GameError, addGold, award, boostsOf, exploredBytes, inventory } from "./players";
+import { grantReport } from "./intel/reports";
+import type { IntelRarity } from "./intel/types";
 
 const now = () => Date.now();
 export const lairById = new Map(lairs.map((l) => [l.id, l]));
@@ -78,6 +80,8 @@ export function discoverLairs(p: Player, pos: { x: number; y: number } | null) {
 /** How close (in tiles) you must stand to challenge; big bosses can be fought from a little further. */
 const reachFor = (tier: string) => 4 + ((BOSS_TIERS as any)[tier].look.scale - 1) * 1.5;
 const CLAIMS_KEPT = 50;
+/** Dev tools: the next boss win for this player drops an intel report of this rarity. */
+export const devNextIntel = new Map<string, string>();
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 /**
@@ -136,7 +140,9 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
     st.kills[id] = (st.kills[id] ?? 0) + 1;
     award(p, "boss-slayer");
     if (boss.tier === "legendary") award(p, "giant-killer");
-    loot = grantLoot(p, l.boss, seed, opts.forceIntel ?? null);
+    const forced = opts.forceIntel ?? devNextIntel.get(p.id) ?? null;
+    devNextIntel.delete(p.id);
+    loot = grantLoot(p, l.boss, seed, forced);
     feed({ kind: "boss", text: `${p.name} defeated ${boss.name} (${tier.name})`, player: p.id });
   }
   const response = { battle: rec, win, loot, lair: lairView(p, id) };
@@ -161,5 +167,7 @@ function grantLoot(p: Player, bossKey: string, seed: number, forceIntel: string 
     feed({ kind: "boss", text: `${p.name} claimed the ${(RELICS as any)[loot.relic].name} from ${boss.name}`, player: p.id });
     if (Object.keys(inv.relics).length >= 3) award(p, "relic-hunter");
   }
-  return { ...loot, goldLanded };
+  // the report is added to the collection now; its contents are fetched a moment later
+  const report = loot.intel ? grantReport(p, bossKey, loot.intel.rarity as IntelRarity) : null;
+  return { ...loot, goldLanded, intel: report ? { rarity: report.rarity, id: report.id, category: report.category } : null };
 }

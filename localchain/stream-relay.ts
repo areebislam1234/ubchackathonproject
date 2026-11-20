@@ -7,11 +7,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { signStreamPayload } from "../shared/hmac";
 import { IS_LOCAL, env, gameUrl, networkDataDir, solanaRpcUrl } from "../server/config";
-import { buildFilter, runFilter } from "../server/chain/filter";
+import { NETWORK_EVERY, buildFilter, runFilter } from "../server/chain/filter";
 import { badgeMints, loadAuthority } from "../server/chain/solana";
 
 const STATE = path.join(networkDataDir, "relay.json");
-const state: { lastSlot: number; lastSigs: Record<string, string> } = fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE, "utf8")) : { lastSlot: 0, lastSigs: {} };
+const state: { lastSlot: number; lastSigs: Record<string, string>; lastSample?: number } = fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE, "utf8")) : { lastSlot: 0, lastSigs: {} };
 const save = () => fs.writeFileSync(STATE, JSON.stringify(state));
 
 let id = 0;
@@ -73,7 +73,8 @@ async function pollDevnet(watch: string[]) {
       if (s.err) continue;
       const tx = await rpc("getTransaction", [s.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" }]);
       if (!tx) continue;
-      const block = { slot: tx.slot, blockTime: tx.blockTime, transactions: [{ transaction: tx.transaction, meta: tx.meta }] };
+      // a one-transaction stand-in for the block: marked partial so the filter never samples it
+      const block = { slot: tx.slot, blockTime: tx.blockTime, partial: true, transactions: [{ transaction: tx.transaction, meta: tx.meta }] };
       const out = runFilter(filterSrc, { data: [block], metadata: { dataset: "block", network: "solana-devnet", batch_start_range: tx.slot, batch_end_range: tx.slot } });
       if (out) await deliver(out);
     }
@@ -82,12 +83,35 @@ async function pollDevnet(watch: string[]) {
   }
 }
 
+/** Devnet: like a Block-dataset Stream, run one full block every NETWORK_EVERY slots through the filter. */
+async function sampleDevnetBlock() {
+  if (NETWORK_EVERY <= 0) return;
+  const slot: number = await rpc("getSlot", [{ commitment: "confirmed" }]);
+  let s = slot - (slot % NETWORK_EVERY);
+  if (state.lastSample && s <= state.lastSample) return;
+  for (let tries = 0; tries < 3; tries++, s -= NETWORK_EVERY) {
+    try {
+      const block = await rpc("getBlock", [s, { encoding: "jsonParsed", maxSupportedTransactionVersion: 1, transactionDetails: "full", rewards: false, commitment: "confirmed" }]);
+      const out = runFilter(filterSrc, { data: [{ ...block, slot: s }], metadata: { dataset: "block", network: "solana-devnet", batch_start_range: s, batch_end_range: s } });
+      if (out) await deliver(out);
+      state.lastSample = s;
+      save();
+      return;
+    } catch (e: any) {
+      if (e.code !== -32007 && e.code !== -32009 && e.code !== -32004) throw e; // skipped or unavailable slot
+    }
+  }
+}
+
 async function loop() {
   try {
     const f = await filter();
     if (f) {
       if (IS_LOCAL) await pollLocal();
-      else await pollDevnet([f.auth, ...f.mints]);
+      else {
+        await pollDevnet([f.auth, ...f.mints]);
+        await sampleDevnetBlock();
+      }
     }
   } catch (e) {
     console.error("stream relay:", (e as Error).message);

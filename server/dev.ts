@@ -64,5 +64,6 @@ export function resetProgress(p: Player) {
   delete p.bosses;
   delete p.bossClaims;
   delete p.inventory;
+  delete p.intel;
   db.save();
 }

@@ -28,6 +28,9 @@ export const env = {
   bots: str(process.env.BOTS, "on") !== "off",
   // Dev panel (edit gold, levels, spawn/settle bounties…). On for demos; DEV_TOOLS=off to hide it.
   devTools: str(process.env.DEV_TOOLS, "on") !== "off",
+  // Intelligence reports from live public data (ESPN, GDELT, World Bank, Open-Meteo, Gemini, QuickNode).
+  // INTEL=off uses clearly labelled sample data only.
+  intel: str(process.env.INTEL, "on") !== "off",
 };
 
 export const solanaRpcUrl = str(process.env.SOLANA_RPC_URL, IS_LOCAL ? `http://127.0.0.1:${env.localChainPort}` : "https://api.devnet.solana.com");

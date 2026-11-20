@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { networkDataDir } from "./config";
+import type { IntelReport } from "./intel/types";
 
 export type UnitMap = Record<string, number>;
 export type WalletKind = "ingame" | "phantom" | "standard" | "address" | "demo";
@@ -38,6 +39,7 @@ export type Player = {
   bosses?: { discovered: string[]; cooldowns: Record<string, number>; kills: Record<string, number> };
   bossClaims?: Record<string, { at: number; response: unknown }>; // challenge requestId → result (idempotency)
   inventory?: Inventory;
+  intel?: IntelReport[]; // collected intelligence reports, kept forever
 };
 
 export type Inventory = {
@@ -126,6 +128,9 @@ export type BattleRecord = {
 
 export type FeedItem = { at: number; kind: string; text: string; bounty?: string; signature?: string; player?: string };
 
+/** One sampled block's activity, from the QuickNode Stream filter. */
+export type NetworkSample = { slot: number; blockTime: number | null; txCount: number; failed: number; vote: number; programs: Record<string, number>; transfers: Record<string, { count: number; amount: number }>; receivedAt: number };
+
 export type ChainEvent = { signature: string; slot: number; blockTime: number | null; memos: string[]; badges: { mint: string; owner: string; pre: number; post: number }[]; receivedAt: number };
 
 export type DBShape = {
@@ -136,7 +141,7 @@ export type DBShape = {
   bounties: Record<string, Bounty>;
   battles: Record<string, BattleRecord>;
   feed: FeedItem[];
-  chain: { processed: Record<string, number>; holdings: Record<string, Record<string, number>>; events: ChainEvent[]; deliveries: number };
+  chain: { processed: Record<string, number>; holdings: Record<string, Record<string, number>>; events: ChainEvent[]; deliveries: number; network?: NetworkSample[] };
   meta: { bountySeq: number; battleSeq: number; playerSeq: number };
 };
 
@@ -185,6 +190,7 @@ class Database {
     const d = this.data;
     if (d.feed.length > 300) d.feed = d.feed.slice(-300);
     if (d.chain.events.length > 500) d.chain.events = d.chain.events.slice(-500);
+    if ((d.chain.network?.length ?? 0) > 500) d.chain.network = d.chain.network!.slice(-500);
     const battles = Object.values(d.battles);
     if (battles.length > 2000) for (const b of battles.sort((a, c) => a.at - c.at).slice(0, battles.length - 2000)) delete d.battles[b.id];
     const tmp = this.file + ".tmp";
