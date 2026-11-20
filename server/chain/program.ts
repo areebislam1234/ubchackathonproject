@@ -223,6 +223,19 @@ export async function releaseStakeIx(a: Address, mint: Address, isGold: boolean,
     [await profilePda(to), "r"], [isGold ? await goldPda(to) : await mightPda(to), "w"], [TOKEN_PROGRAM, "r"],
   ]);
 }
+/**
+ * Raise the transaction's compute budget. A transaction gets 200,000 compute units by default, and
+ * resolving a battle on-chain runs the whole fight: legendary and epic bosses (hashforge-colossus,
+ * elder-treant, …) need more than that and failed with "exceeded CUs meter" (surfaced as Solana
+ * error -32002). 1,400,000 is the per-transaction maximum; the fee is unchanged without a price.
+ */
+export const COMPUTE_BUDGET_PROGRAM = "ComputeBudget111111111111111111111111111111" as Address;
+export function setComputeUnitLimitIx(units: number) {
+  const data = Buffer.alloc(5);
+  data[0] = 2; // ComputeBudgetInstruction::SetComputeUnitLimit
+  data.writeUInt32LE(units, 1);
+  return { programAddress: COMPUTE_BUDGET_PROGRAM, accounts: [], data: Uint8Array.from(data) };
+}
 export async function resolveBattleIx(a: Address, kind: number, context: string, attacker: any, defender: any, atkWallet: Address | null, defWallet: Address | null) {
   // Anchor optional accounts: a missing one is passed as the program id
   return ix("resolve_battle", [["kind", "u8"], ["context", "string"], ["attacker", { struct: BATTLE_SIDE }], ["defender", { struct: BATTLE_SIDE }]], { kind, context: context.slice(0, 40), attacker, defender }, [
