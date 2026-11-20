@@ -183,9 +183,9 @@ export class GeminiClient {
   }
 
   /** Flattened list of open markets. */
-  async openMarkets(): Promise<MarketSummary[]> {
+  async openMarkets(maxAgeMs = 5000): Promise<MarketSummary[]> {
     const out: MarketSummary[] = [];
-    for (const e of await this.activeEvents()) {
+    for (const e of await this.activeEvents(maxAgeMs)) {
       for (const c of e.contracts ?? []) if (isOpen(c)) out.push(summarize(e, c));
     }
     return out;

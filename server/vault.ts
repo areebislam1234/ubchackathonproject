@@ -43,6 +43,7 @@ export const VAULT = {
   minSol: 0.01,
   maxSol: 1000,
   tickMs: 10_000,
+  reserveLamports: 10_000_000, // 0.01 SOL the vault account always keeps for network fees and rent
 };
 
 export type VaultEntry = { at: number; kind: "deposit" | "withdraw" | "withdraw-refund" | "growth"; lamports?: number; usd?: number; might?: number; price?: number; signature?: string; status?: "sending" | "sent" | "confirmed" | "failed"; error?: string; streamed?: boolean; nonce?: string };
@@ -263,6 +264,16 @@ export async function withdrawSol(p: Player, body: { sol?: unknown; requestId?: 
   const lamports = Math.round(Number(body.sol) * LAMPORTS);
   if (!(lamports > 0)) throw new GameError("Enter how much SOL to withdraw.");
   if (lamports > v.lamports) throw new GameError(`Your vault holds ${(v.lamports / LAMPORTS).toFixed(4)} SOL.`);
+  // The vault is the game's own account, which also pays network fees: never send so much that it
+  // can't cover the fee and stay rent-exempt. Explain how to top it up instead of failing on-chain.
+  const authority = await loadAuthority();
+  if (!authority) throw new GameError("The game has no vault on this network yet. Run `npm run setup-solana` first.", 503);
+  const held = Number((await rpc.getBalance(authority.address, { commitment: "confirmed" }).send()).value);
+  if (held - lamports < VAULT.reserveLamports)
+    throw new GameError(
+      `The game's vault account (${authority.address}) holds ${(held / LAMPORTS).toFixed(4)} SOL and needs to keep ${(VAULT.reserveLamports / LAMPORTS).toFixed(2)} SOL for network fees. Send it about 0.1 devnet SOL (from Phantom, or faucet.solana.com), then withdraw again. Your SOL is safe in your vault.`,
+      503,
+    );
   const price = await solPrice();
   if (price) accrue(p, price.usd); // settle growth up to now first
   // the high-water mark shrinks in proportion, so withdrawing never creates or destroys growth
@@ -271,9 +282,7 @@ export async function withdrawSol(p: Player, body: { sol?: unknown; requestId?: 
   v.hwm -= hwmOut;
   const entry = record(v, { kind: "withdraw", lamports, price: price?.usd, status: "sending" });
   db.save();
-  const authority = await loadAuthority();
   try {
-    if (!authority) throw new Error("no vault authority");
     const sig = await send([getTransferSolInstruction({ source: authority, destination: address(to), amount: BigInt(lamports) }), getAddMemoInstruction({ memo: `stakeclash:v1:vault-out:${p.id}` }, { programAddress: LEGACY_MEMO_PROGRAM_ADDRESS_V3 })]);
     entry.signature = sig;
     entry.status = "sent";
@@ -287,7 +296,7 @@ export async function withdrawSol(p: Player, body: { sol?: unknown; requestId?: 
     v.hwm += hwmOut;
     entry.status = "failed";
     entry.error = (e as Error).message.slice(0, 160);
-    record(v, { kind: "withdraw-refund", lamports });
+    record(v, { kind: "withdraw-refund", lamports, status: "confirmed" });
     db.save();
     throw new GameError(`The withdrawal didn't go through, so your SOL stays in the vault: ${entry.error}`);
   }
@@ -325,6 +334,14 @@ export async function vaultView(p: Player) {
       walletLamports = null;
     }
   }
+  let vaultLamports: number | null = null;
+  if (vault) {
+    try {
+      vaultLamports = Number((await rpc.getBalance(vault.address, { commitment: "confirmed" }).send()).value);
+    } catch {
+      vaultLamports = null;
+    }
+  }
   const value = price ? valueOf(v.lamports, price.usd) : null;
   // the SOL price the vault must pass to earn more Might
   const nextAt = v.lamports ? (v.hwm / MICRO / (v.lamports / LAMPORTS)) : null;
@@ -333,6 +350,8 @@ export async function vaultView(p: Player) {
     chain: IS_LOCAL ? "solana:localnet" : "solana:devnet",
     vault: vault?.address ?? null,
     vaultExplorer: vault ? explorerAddress(vault.address) : null,
+    vaultLamports,
+    reserveLamports: VAULT.reserveLamports,
     wallet: p.wallet ? { address: p.wallet.address, kind: p.wallet.kind, label: p.wallet.label ?? null, verified: p.wallet.kind === "address" ? false : (p.wallet.verified ?? true) } : null,
     walletLamports,
     lamports: v.lamports,

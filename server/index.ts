@@ -407,7 +407,7 @@ app.post(
     const j: any = await r.json().catch(() => ({}));
     if (!r.ok) throw new GameError(j.error ?? "Mock Gemini refused.");
     gemini.clearCache();
-    await sampleNow(marketsForOdds);
+    await sampleNow(() => gemini.openMarkets(0)); // fresh: a fetch already in flight may hold pre-jolt prices
     const top = crierTick(Date.now(), { force: true });
     return { shocked: j.market, crier: top ? top.question : null };
   }),

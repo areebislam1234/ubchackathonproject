@@ -78,6 +78,11 @@ function render(G) {
         : `<div class="coach">Your vault is empty. Deposit some SOL below, then watch the Might roll in whenever SOL climbs.</div>`
     }
 
+    ${
+      d.vaultLamports != null && d.lamports && d.vaultLamports - Math.min(d.lamports, d.vaultLamports) < d.reserveLamports
+        ? `<div class="coach warn vault-warn">The game's vault account holds ◎ ${sol(d.vaultLamports)} and needs to keep ◎ ${sol(d.reserveLamports, 2)} for network fees, so a full withdrawal can't go through yet. Send it about 0.1 devnet SOL: from Phantom, send to <span class="mono">${esc(d.vault)}</span> <button class="linklike" id="v-copy">copy address</button>, or use faucet.solana.com. Your SOL is safe in your vault.</div>`
+        : ""
+    }
     <div class="grid2 vault-cols">
       <section class="card">
         <h3 style="margin-top:0">${icon("chest", 2)} Deposit SOL</h3>
@@ -121,6 +126,7 @@ function render(G) {
 
 const LABEL = { deposit: "Deposit", withdraw: "Withdraw", "withdraw-refund": "Withdrawal refunded", growth: "Growth → Might" };
 function statusOf(e) {
+  if (e.kind === "withdraw-refund") return `<span class="rcpt">Back in your vault</span>`;
   const link = e.explorer ? ` <a href="${esc(e.explorer)}" target="_blank" rel="noopener">tx</a>` : e.signature ? ` <span class="mono" title="${esc(e.signature)}">${esc(e.signature.slice(0, 6))}…</span>` : "";
   if (e.kind === "growth") return "";
   if (e.status === "failed") return `<span class="rcpt bad">Failed</span>`;
@@ -129,6 +135,7 @@ function statusOf(e) {
 }
 
 function wire(G, body) {
+  body.querySelector("#v-copy")?.addEventListener("click", () => navigator.clipboard?.writeText(data.vault).then(() => toast("Vault address copied.", "good")));
   body.querySelector("#v-link")?.addEventListener("click", () => G.openProfile?.());
   body.querySelector("#v-usdc")?.addEventListener("click", () => openTreasury(G, "overview", { legacy: true }));
   body.querySelector("#v-airdrop")?.addEventListener("click", (e) =>
