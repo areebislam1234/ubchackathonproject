@@ -105,7 +105,13 @@ Everything that moves value or decides a result belongs to the StakeClash Solana
 - Each action is applied in the game at once and queued as a program instruction. The queue is persisted, ordered and retried until confirmed.
 - Gold and Might use a shadow ledger: explicit actions (upgrades, unlocks, stakes, payouts) adjust it, and a settlement every 30 seconds mints or burns the rest, netting many small changes into one instruction.
 - **Before the program is deployed** the bridge runs in **local mode**. Each action produces the exact event the program would emit, labelled local. The screens below work now, say plainly that their data isn't on-chain yet, and switch to on-chain data when the program goes live.
-- **Not yet:** in on-chain mode the program rolls its own seed, so a battle's on-chain result can differ from the one the game already showed. Making the game wait for (or reconcile with) the chain's result is the next step after deployment.
+- **The chain decides every battle that involves a real player** (`server/chain/arbiter.ts`).
+  - When you attack a bounty, challenge a boss or answer a duel, the game validates the fight, sends it to the program and waits about a second while a "Battle being decided on Solana…" overlay shows.
+  - It reads the seed from the `BattleResolved` event and re-runs the same engine with it, so the replay is exactly what the chain decided. Losses, loot, score and payouts all come from that result.
+  - Nothing is applied until then, and you can't start a second battle meanwhile.
+  - If the network is slow the request returns "pending" and the client polls until the result lands.
+  - The result card says who decided the battle and links the transaction.
+  - Before deployment the server rolls the seed and the same code runs at once. `CHAIN_PROGRAM=simulate` acts like the chain (a short delay and a random seed), for testing the waiting flow.
 
 **QuickNode is the primary way the game reads the chain** (`server/chain/indexer.ts`):
 - **Streams:** the filter forwards the program's transaction logs. The webhook checks the HMAC, then decodes the Anchor events.

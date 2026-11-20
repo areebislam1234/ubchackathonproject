@@ -7,6 +7,7 @@ import { icon, spriteUrl } from "../gfx.js";
 import { act, closeSheet, currentSheet, esc, fmt, openSheet, timeLeft, toast } from "../ui.js";
 import { openBattle } from "./battle.js";
 import { planPicker } from "./formation.js";
+import { decideBattle } from "../chainwait.js";
 
 let cur = null; // { id, data, send, requestId }
 const reachFor = (scale) => 4 + (scale - 1) * 1.5;
@@ -100,7 +101,7 @@ async function fight(G) {
   const d = cur.data;
   const hero = { x: Math.floor(G.view.hero.x / 16), y: Math.floor((G.view.hero.y - 2) / 16) };
   // The same request id is reused if this click is retried, so the server never pays twice.
-  const r = await api(`/api/bosses/${d.id}/challenge`, { body: { ...cur.plan(), requestId: cur.requestId, pos: hero } });
+  const r = await decideBattle(() => api(`/api/bosses/${d.id}/challenge`, { body: { ...cur.plan(), requestId: cur.requestId, pos: hero } }));
   cur.requestId = newRequestId();
   closeSheet();
   openBattle(G, r.battle, {

@@ -6,6 +6,7 @@ import { BOSSES, BOSS_TIERS, RELICS, autoFormation, bossArmy, formationArmy, rol
 import { FOG_CELL, FOG_W, REALMS, SIGHT } from "../shared/world.js";
 import { attackFormation, lairs } from "./bounties";
 import * as chain from "./chain/onchain";
+import { runBattle, stamp, verifyAgainstChain, type Decision } from "./chain/arbiter";
 import { db, feed, type BattleRecord, type Player } from "./db";
 import { GameError, award, boostsOf, earnDrills, exploredBytes, inventory, vigorOf } from "./players";
 import { grantReport } from "./intel/reports";
@@ -116,10 +117,26 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
   const army = bossArmy(l.boss);
   const bossAbilities = boss.tier === "epic" || boss.tier === "legendary" ? (BOSS_ABILITIES[boss.look] ?? []).slice(0, boss.tier === "legendary" ? 2 : 1) : [];
   const bossFormation = { ...autoFormation(army.units, BOSS_PRESET[boss.look] ?? "shieldwall"), ...(bossAbilities.length ? { abilities: bossAbilities } : {}) };
-  const seed = crypto.randomBytes(4).readUInt32LE(0);
   const boosts = boostsOf(p);
   const vigor = vigorOf(p);
-  const result = simulate({ engine: 2, attacker: { units: sent, levels: p.unitLevels, boosts, vigor, formation }, defender: { ...army, formation: bossFormation }, seed });
+  const attacker = { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, ...(boosts ? { boosts } : {}), ...(vigor ? { vigor } : {}), formation };
+  const defender = { id: `boss:${id}`, name: boss.name, units: army.units, levels: army.levels, towers: army.towers, champions: army.champions, formation: bossFormation };
+  // the chain decides the battle (when the program is deployed); everything below waits for it
+  return runBattle({ kind: "boss", context: `boss:${l.boss}`, attacker, defender, atkPlayer: p, defPlayer: null }, (d) => {
+    const again = p.bossClaims![rid];
+    if (again) return again.response; // the same request already landed
+    if ((bossState(p).cooldowns[id] ?? 0) > now()) throw new GameError(`${boss.name} has already retreated. Nothing was applied.`, 429);
+    for (const [k, n] of Object.entries(sent) as [string, number][]) if ((p.army[k] ?? 0) < n) throw new GameError("Some of the troops you sent are gone. Nothing was applied.");
+    return applyChallenge(p, id, l, boss, tier, st, attacker, defender, army, bossFormation, sent, formation, rid, opts, d);
+  }, { lockPlayer: p });
+}
+
+function applyChallenge(p: Player, id: string, l: any, boss: any, tier: any, st: ReturnType<typeof bossState>, attacker: any, defender: any, army: any, bossFormation: any, sent: Record<string, number>, formation: any, rid: string, opts: { forceIntel?: string | null }, d: Decision) {
+  p.bossClaims ??= {};
+  const seed = d.seed;
+  const levels = d.levels?.attacker ?? p.unitLevels;
+  const { boosts, vigor } = attacker;
+  const result = simulate({ engine: 2, attacker: { units: sent, levels, boosts, vigor, formation }, defender: { ...army, formation: bossFormation }, seed });
   const rec: BattleRecord = {
     id: `F-${++db.data.meta.battleSeq}`,
     engine: 2,
@@ -127,10 +144,12 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
     boss: id,
     at: now(),
     seed,
-    attacker: { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, ...(boosts ? { boosts } : {}), ...(vigor ? { vigor } : {}), formation },
-    defender: { id: `boss:${id}`, name: boss.name, units: army.units, levels: army.levels, towers: army.towers, champions: army.champions, formation: bossFormation },
+    attacker: { ...attacker, levels: { ...levels } },
+    defender,
     result,
   };
+  stamp(rec, d);
+  verifyAgainstChain(rec);
   db.data.battles[rec.id] = rec;
   chain.onBattle(rec, "boss");
   for (const [k, n] of Object.entries(result.lost)) p.army[k] = Math.max(0, (p.army[k] ?? 0) - (n as number));

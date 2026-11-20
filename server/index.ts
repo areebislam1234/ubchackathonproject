@@ -24,6 +24,7 @@ import { encodePng } from "./png";
 import { chainMode, queueStatus, startOnchain, state as onchainState } from "./chain/onchain";
 import { economyBoard, indexStatus, publicStats } from "./chain/indexer";
 import { dossierList, readDossier } from "./dossiers";
+import { arbiterMode, pendingBattle } from "./chain/arbiter";
 
 // When a badge is earned with a wallet linked, mint it; results get sealed on-chain.
 onBadge((p, badge) => {
@@ -233,7 +234,8 @@ app.get("/api/players/:id/public", auth, wrap((req) => {
   if (!p) throw new GameError("No such warlord.", 404);
   return publicStats(p);
 }));
-app.get("/api/chain/program", wrap(() => ({ ...chainMode(), queue: queueStatus(), index: indexStatus() })));
+app.get("/api/chain/program", wrap(() => ({ ...chainMode(), battles: arbiterMode(), queue: queueStatus(), index: indexStatus() })));
+app.get("/api/battles/pending/:id", auth, wrap((req) => pendingBattle(req.player, String(req.params.id))));
 app.get("/api/dossiers", auth, wrap((req) => dossierList(req.player)));
 app.post("/api/dossiers", auth, wrap((req) => readDossier(req.player, String(req.body?.target ?? ""))));
 app.post("/api/army/mastery", auth, wrap(() => {

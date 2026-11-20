@@ -180,6 +180,7 @@ function showResult2(G, rec, sim, onDone, doneLabel, lootHtml) {
     ${factors ? `<h3 style="margin:8px 0 4px">Why it went this way</h3><ul class="report-list">${factors}</ul>` : ""}
     ${lootHtml}
     <p class="note">${lost ? `Fallen: ${esc(lost)}.` : "No losses."}${rep?.theirLosses?.length ? ` Enemy: ${esc(rep.theirLosses.join(", "))}.` : ""}</p>
+    <p class="note decided">${rec.chain ? (rec.chain.mode === "chain" ? `Decided on Solana${rec.chain.slot ? ` in slot ${fmt(rec.chain.slot)}` : ""}${rec.chain.url ? ` · <a href="${esc(rec.chain.url)}" target="_blank" rel="noopener">verify</a>` : ""}` : "Decided by the simulated chain (test mode)") : "Decided by the game server (the on-chain program isn't deployed yet)"} · seed ${rec.seed}</p>
     <button class="btn btn-gold btn-big" id="b-done">${esc(doneLabel)}</button>`;
   $("battle").append(card);
   $("b-done").onclick = () => {

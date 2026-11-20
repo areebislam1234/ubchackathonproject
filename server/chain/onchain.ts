@@ -27,6 +27,7 @@ export type QueueItem = {
   tries: number;
   at: number;
   sig?: string;
+  sentAt?: number;
   error?: string;
 };
 
@@ -219,6 +220,7 @@ export const stakeRemaining = (key: string) => state().stakes[key]?.remaining ??
 /** A battle the game fought, resolved by the program too (engine 2 records only). */
 export function onBattle(rec: BattleRecord, kind: "bounty" | "boss" | "duel" | "other") {
   if (rec.engine !== 2) return;
+  if (rec.chain?.mode === "chain") return; // resolved by the program itself (the arbiter)
   const atkP = db.data.players[rec.attacker.id];
   const defP = db.data.players[rec.defender.id];
   const atkKey = atkP && !atkP.bot ? (ensureRegistered(atkP), keyOf(atkP.id)) : null;
@@ -274,6 +276,25 @@ export function settleAll() {
 }
 
 // ── Sender ────────────────────────────────────────────────────────────
+const waiters = new Map<number, { resolve: (sig: string) => void; reject: (e: Error) => void }>();
+
+/** Queue an instruction and wait until it is confirmed (keeps queue order). Resolves with its signature. */
+export function enqueueAndWait(op: string, args: any, player: string | undefined): Promise<string> {
+  const s = state();
+  const item: QueueItem = { id: ++s.seq, op, args, player, status: "queued", tries: 0, at: Date.now() };
+  s.queue.push(item);
+  db.save();
+  const p = new Promise<string>((resolve, reject) => waiters.set(item.id, { resolve, reject }));
+  kick();
+  return p;
+}
+function settleWaiter(item: QueueItem) {
+  const w = waiters.get(item.id);
+  if (!w) return;
+  if (item.status === "confirmed") (waiters.delete(item.id), w.resolve(item.sig!));
+  else if (item.status === "failed") (waiters.delete(item.id), w.reject(new Error(item.error ?? "transaction failed")));
+}
+
 let running = false;
 function kick() {
   if (mode !== "chain" || running) return;
@@ -290,6 +311,21 @@ async function drain() {
     if (item.status === "confirmed" || item.status === "failed") continue;
     if (mode !== "chain") return;
     try {
+      // Sent before but not confirmed yet: never send it again blindly (a battle or a Gold settlement
+      // would run twice). Look it up; resend only once its blockhash has surely expired.
+      if (item.status === "sent" && item.sig) {
+        const { value } = await rpc.getSignatureStatuses([item.sig as any], { searchTransactionHistory: true }).send();
+        const st = value[0];
+        if (st && !st.err && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) {
+          item.status = "confirmed";
+          settleWaiter(item);
+          db.save();
+          continue;
+        }
+        if (!st && Date.now() - (item.sentAt ?? 0) < 90_000) return; // may still land: wait
+        if (st && !st.err) return; // processed, not confirmed yet
+        item.status = "queued"; // failed or expired: safe to send again
+      }
       const ix = await build(item, auth.address, mints);
       if (!ix) {
         item.status = "confirmed";
@@ -297,17 +333,20 @@ async function drain() {
       }
       item.tries++;
       item.status = "sent";
+      item.sentAt = Date.now();
       item.sig = await send(ix);
       db.save();
       if (await confirm(item.sig)) item.status = "confirmed";
-      else item.status = "queued"; // not seen yet: retry later (a duplicate send fails harmlessly on init)
+      else return; // not confirmed yet: stays "sent" and is looked up on the next pass
     } catch (e) {
       item.error = (e as Error).message.slice(0, 200);
       item.status = item.tries >= 5 ? "failed" : "queued";
       if (item.status === "failed") console.warn(`on-chain ${item.op} #${item.id} failed: ${item.error}`);
+      settleWaiter(item);
       db.save();
       return; // keep order: try again on the next tick
     }
+    settleWaiter(item);
     db.save();
   }
 }
@@ -367,6 +406,7 @@ export function startOnchain() {
     settleAll();
     kick();
   }, 30_000).unref?.();
+  setInterval(() => kick(), 3_000).unref?.(); // keeps sent-but-unconfirmed items moving
   setInterval(() => void detectMode().then(kick), 5 * 60_000).unref?.();
 }
 

@@ -10,6 +10,7 @@ import { changeTag, oddsChart, plainOdds, sparkline } from "../odds-chart.js";
 import { act, ago, closeSheet, currentSheet, esc, fmt, openSheet, timeLeft, toast } from "../ui.js";
 import { openBattle } from "./battle.js";
 import { bindProfileLinks, scoutInto } from "./economy.js";
+import { decideBattle } from "../chainwait.js";
 
 let st = { tab: "board", data: null, markets: [], market: null, series: null, side: "yes", conf: 65, stake: 0, send: {}, answering: null, requestId: null };
 let timer = null;
@@ -350,7 +351,7 @@ function wire(G, body) {
   bindProfileLinks(G, body);
   body.querySelector("#c-accept")?.addEventListener("click", (e) =>
     act(e.currentTarget, async () => {
-      const r = await api(`/api/colosseum/${st.answering}/accept`, { body: { units: st.send, side: st.side, confBps: st.conf * 100, requestId: st.requestId } });
+      const r = await decideBattle(() => api(`/api/colosseum/${st.answering}/accept`, { body: { units: st.send, side: st.side, confBps: st.conf * 100, requestId: st.requestId } }));
       st.requestId = newRequestId();
       st.answering = null;
       st.tab = "mine";

@@ -23,6 +23,7 @@ import { oddsSeries, WINDOWS } from "./odds";
 import { attackFormation } from "./bounties";
 import { GameError, award, boostsOf, vigorOf } from "./players";
 import * as chain from "./chain/onchain";
+import { runBattle, stamp, verifyAgainstChain, type Decision } from "./chain/arbiter";
 
 const potKeys = (d: Duel) => [`duel:${d.id}:c`, `duel:${d.id}:r`];
 
@@ -172,9 +173,35 @@ export async function acceptChallenge(p: Player, id: string, body: any) {
   chain.onStake(p, potKeys(d)[1], d.stake, `duel:${d.id}`);
   d.rival = sideFor(d, p, units, call, sidePriceBps(call.side, q.bid, q.ask));
   postReceipt(d.rival.receipt!);
-  const rec = fight(d);
-  p.lastCombatAt = now();
-  return remember(p, rid, { duel: duelView(d, p), battle: rec, might: p.might });
+  // the chain decides the fight; while it does, nobody else can answer this challenge
+  d.status = "fighting";
+  return runBattle(
+    duelInput(d),
+    (dec) => {
+      const rec = fight(d, dec);
+      p.lastCombatAt = now();
+      return remember(p, rid, { duel: duelView(d, p), battle: rec, might: p.might });
+    },
+    {
+      lockPlayer: p,
+      onCancel: () => {
+        // the chain never decided: give the stake back and reopen the challenge
+        d.status = "open";
+        d.rival = undefined;
+        p.might = (p.might ?? 0) + d.stake;
+        chain.onRelease(potKeys(d)[1], p, d.stake, 0, `duel:${d.id}:cancel`);
+        db.save();
+      },
+    },
+  );
+}
+
+/** The duel as the program sees it: the rival attacks, the challenger defends. */
+function duelInput(d: Duel) {
+  const a = d.rival!;
+  const c = d.challenger;
+  const side = (x: DuelSide, towers?: number) => ({ id: x.playerId, name: x.name, units: x.units, levels: x.levels, ...(x.boosts ? { boosts: x.boosts } : {}), ...(x.vigor ? { vigor: x.vigor } : {}), ...(towers !== undefined ? { towers } : {}), formation: x.formation });
+  return { kind: "duel" as const, context: `duel:${d.id}`, attacker: side(a) as any, defender: side(c, 0) as any, atkPlayer: db.data.players[a.playerId] ?? null, defPlayer: db.data.players[c.playerId] ?? null };
 }
 
 export function cancelChallenge(p: Player, id: string) {
@@ -189,10 +216,13 @@ export function cancelChallenge(p: Player, id: string) {
 }
 
 // ── The fight (steel) ─────────────────────────────────────────────────
-function fight(d: Duel): BattleRecord {
+function fight(d: Duel, dec?: Decision): BattleRecord {
   const a = d.rival!;
   const c = d.challenger;
-  const seed = crypto.randomBytes(4).readUInt32LE(0);
+  const seed = dec?.seed ?? crypto.randomBytes(4).readUInt32LE(0);
+  // the program fights with each player's on-chain profile levels
+  if (dec?.levels?.attacker) a.levels = dec.levels.attacker;
+  if (dec?.levels?.defender) c.levels = dec.levels.defender;
   // duels made before formations existed keep the original engine
   const engine = a.formation && c.formation ? 2 : 1;
   const af = engine === 2 ? { formation: a.formation } : {};
@@ -213,6 +243,10 @@ function fight(d: Duel): BattleRecord {
     defender: { id: c.playerId, name: c.name, units: c.units, levels: c.levels, towers: 0, ...(c.boosts ? { boosts: c.boosts } : {}), ...(c.vigor ? { vigor: c.vigor } : {}), ...cf },
     result,
   };
+  if (dec) {
+    stamp(rec, dec);
+    verifyAgainstChain(rec);
+  }
   db.data.battles[rec.id] = rec;
   // Arena fights are to first blood: no units are lost.
   const split = duelPot(d.stake);
@@ -318,7 +352,16 @@ function botAccept(d: Duel) {
   d.rival = sideFor(d, bot, units, { side, confBps }, priceBps);
   d.rival.bot = true;
   postReceipt(d.rival.receipt!);
-  fight(d);
+  d.status = "fighting";
+  const run = runBattle(duelInput(d), (dec) => fight(d, dec), {
+    onCancel: () => {
+      d.status = "open";
+      d.rival = undefined;
+      d.botAt = now() + COLOSSEUM.botAcceptSec * 1000;
+      db.save();
+    },
+  });
+  if (run instanceof Promise) run.catch(() => {});
   return true;
 }
 export const botStyle = (bot: { id: string }) => (strSeed(bot.id) % 2 ? "momentum" : "contrarian");

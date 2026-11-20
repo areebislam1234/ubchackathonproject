@@ -168,6 +168,7 @@ export type Champion = { look: string; hp: number; dmg: number; range: number; s
 export type BattleRecord = {
   id: string;
   engine?: number; // 2 = formations and rounds; missing = the original engine (old records)
+  chain?: { mode: "chain" | "simulate"; seed: number; signature: string; slot: number | null; url: string | null; engineMismatch?: boolean }; // decided by the on-chain program
   bounty: string;
   at: number;
   seed: number;
@@ -204,7 +205,7 @@ export type DuelSide = {
 export type Duel = {
   id: string;
   createdAt: number;
-  status: "open" | "fought" | "settled" | "cancelled";
+  status: "open" | "fighting" | "fought" | "settled" | "cancelled";
   stake: number; // Might each side put up
   market: string;
   question: string;

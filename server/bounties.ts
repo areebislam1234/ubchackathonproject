@@ -26,6 +26,7 @@ import { GeminiClient, contractPricesBps, type MarketSummary } from "../gemini/c
 import { env } from "./config";
 import { db, feed, type BattleRecord, type Bounty, type Entry, type Player } from "./db";
 import * as chain from "./chain/onchain";
+import { runBattle, stamp, verifyAgainstChain, type Decision } from "./chain/arbiter";
 import { COMBAT_MS, GameError, addGold, award, boostsOf, exploredBytes, fieldFormation, newPlayer, relicFx, vigorOf } from "./players";
 
 export const world = generateWorld();
@@ -327,16 +328,41 @@ export function opponents(p: Player, id: string) {
 
 const LOOT = { common: 40, rare: 70, epic: 110 };
 
-export function attack(p: Player, id: string, opponentId: string, units: Record<string, number>, plan: { formation?: unknown; preset?: unknown; order?: unknown; abilities?: unknown } = {}) {
-  const b = db.data.bounties[id];
+function checkAttack(p: Player, b: Bounty | undefined): asserts b is Bounty {
   if (!b) throw new GameError("No such bounty.", 404);
   if (b.status !== "active") throw new GameError(b.status === "upcoming" ? "The bounty hasn't started yet." : "This bounty's battles are over.");
   const entry = b.entries[p.id];
   if (!entry) throw new GameError("Enter the bounty first.");
   if (entry.attacks >= ATTACKS_PER_BOUNTY) throw new GameError(`You've used all ${ATTACKS_PER_BOUNTY} attacks in this bounty.`);
+}
+
+/**
+ * Attack inside a bounty. The battle is decided by the on-chain program when it's deployed (the
+ * game waits for it, about a second), then applied here; before deployment it is decided at once.
+ */
+export function attack(p: Player, id: string, opponentId: string, units: Record<string, number>, plan: { formation?: unknown; preset?: unknown; order?: unknown; abilities?: unknown } = {}) {
+  const b = db.data.bounties[id];
+  checkAttack(p, b);
   const formation = attackFormation(p, units, plan);
   const sent = formationArmy(formation);
-  const rec = fight(b, { id: p.id, name: p.name, units: sent, levels: p.unitLevels, boosts: boostsOf(p), vigor: vigorOf(p), formation }, opponentId);
+  const atk = { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, boosts: boostsOf(p), vigor: vigorOf(p), formation };
+  const defender = defenderFor(b, p.id, opponentId);
+  return runBattle(
+    { kind: "bounty", context: b.id, attacker: atk as any, defender, atkPlayer: p, defPlayer: null },
+    (d) => {
+      // things may have changed while the chain decided
+      const now2 = db.data.bounties[id];
+      checkAttack(p, now2);
+      for (const [k, n] of Object.entries(sent) as [string, number][]) if ((p.army[k] ?? 0) < n) throw new GameError("Some of the troops you sent are gone. Nothing was applied.");
+      return applyAttack(p, now2, atk, opponentId, d);
+    },
+    { lockPlayer: p },
+  );
+}
+
+function applyAttack(p: Player, b: Bounty, atk: Parameters<typeof fight>[1], opponentId: string, d: Decision) {
+  const id = b.id;
+  const rec = fight(b, atk, opponentId, d);
   p.lastCombatAt = now();
   // casualties come out of your army
   for (const [k, n] of Object.entries(rec.result.lost)) p.army[k] = Math.max(0, (p.army[k] ?? 0) - n);
@@ -376,20 +402,26 @@ export function attackFormation(p: Player, units: Record<string, number> | undef
 
 const GUARDIAN_PRESET = { common: "shieldwall", rare: "ranged", epic: "assault" } as const;
 
-/** Run one attack inside a bounty and update scores. Used by players and bots. */
-function fight(b: Bounty, atk: { id: string; name: string; units: Record<string, number>; levels: Record<string, number>; boosts?: Record<string, number>; vigor?: Record<string, number>; formation?: any }, opponentId: string): BattleRecord {
-  const entry = b.entries[atk.id];
-  let defender: BattleRecord["defender"];
-  const defEntry = opponentId !== "guardian" ? b.entries[opponentId] : null;
+/** Who defends: the camp guardian, or a rival's army as it was frozen when they entered. */
+function defenderFor(b: Bounty, atkId: string, opponentId: string): BattleRecord["defender"] {
   if (opponentId === "guardian") {
     const g = guardianArmy(b.tier);
-    defender = { id: "guardian", name: `${b.id} Guardian`, units: g.units, levels: g.levels, towers: g.towers, guardian: true, formation: autoFormation(g.units, GUARDIAN_PRESET[b.tier]) };
-  } else {
-    if (!defEntry) throw new GameError("That rival isn't in this bounty.");
-    if (opponentId === atk.id) throw new GameError("You can't attack yourself.");
-    defender = { id: defEntry.playerId, name: defEntry.name, units: defEntry.army, levels: defEntry.levels, towers: defEntry.towers, ...(defEntry.boosts ? { boosts: defEntry.boosts } : {}), ...(defEntry.vigor ? { vigor: defEntry.vigor } : {}), formation: defEntry.formation ?? autoFormation(defEntry.army, "shieldwall") };
+    return { id: "guardian", name: `${b.id} Guardian`, units: g.units, levels: g.levels, towers: g.towers, guardian: true, formation: autoFormation(g.units, GUARDIAN_PRESET[b.tier]) };
   }
-  const seed = crypto.randomBytes(4).readUInt32LE(0);
+  const defEntry = b.entries[opponentId];
+  if (!defEntry) throw new GameError("That rival isn't in this bounty.");
+  if (opponentId === atkId) throw new GameError("You can't attack yourself.");
+  return { id: defEntry.playerId, name: defEntry.name, units: defEntry.army, levels: defEntry.levels, towers: defEntry.towers, ...(defEntry.boosts ? { boosts: defEntry.boosts } : {}), ...(defEntry.vigor ? { vigor: defEntry.vigor } : {}), formation: defEntry.formation ?? autoFormation(defEntry.army, "shieldwall") };
+}
+
+/** Run one attack inside a bounty and update scores. Used by players and bots. `d` is the chain's decision. */
+function fight(b: Bounty, atk: { id: string; name: string; units: Record<string, number>; levels: Record<string, number>; boosts?: Record<string, number>; vigor?: Record<string, number>; formation?: any }, opponentId: string, d?: Decision): BattleRecord {
+  const entry = b.entries[atk.id];
+  const defEntry = opponentId !== "guardian" ? b.entries[opponentId] : null;
+  const defender = defenderFor(b, atk.id, opponentId);
+  // the program fights with the attacker's on-chain profile levels
+  if (d?.levels?.attacker) atk = { ...atk, levels: d.levels.attacker };
+  const seed = d?.seed ?? crypto.randomBytes(4).readUInt32LE(0);
   const atkFormation = atk.formation ?? autoFormation(atk.units, "shieldwall");
   const result = simulate({ engine: 2, attacker: { units: atk.units, levels: atk.levels, boosts: atk.boosts, vigor: atk.vigor, formation: atkFormation }, defender, seed });
   entry.attacks++;
@@ -400,6 +432,10 @@ function fight(b: Bounty, atk: { id: string; name: string; units: Record<string,
     defEntry.score += DEFENSE_POINTS;
   }
   const rec: BattleRecord = { id: `F-${++db.data.meta.battleSeq}`, engine: 2, bounty: b.id, at: now(), seed, attacker: { id: atk.id, name: atk.name, units: atk.units, levels: atk.levels, ...(atk.boosts ? { boosts: atk.boosts } : {}), ...(atk.vigor ? { vigor: atk.vigor } : {}), formation: atkFormation }, defender, result };
+  if (d) {
+    stamp(rec, d);
+    verifyAgainstChain(rec);
+  }
   db.data.battles[rec.id] = rec;
   chain.onBattle(rec, "bounty");
   const verb = result.winner === "attacker" ? "crushed" : "was repelled by";
@@ -532,8 +568,21 @@ function runBots(b: Bounty) {
     const rivals = Object.values(b.entries).filter((x) => x.playerId !== e.playerId);
     const humans = rivals.filter((x) => !x.bot);
     const target = humans.length && rnd() < 0.5 ? pick(humans) : rivals.length && rnd() < 0.7 ? pick(rivals) : null;
-    const rec = fight(b, { id: e.playerId, name: e.name, units: e.army, levels: e.levels, formation: e.formation }, target?.playerId ?? "guardian");
-    if (target && !target.bot && rec.result.winner === "defender") feed({ kind: "defend", text: `${target.name} held off ${e.name} in ${b.id} (+${DEFENSE_POINTS} defense)`, bounty: b.id, player: target.playerId });
+    const botAtk = { id: e.playerId, name: e.name, units: e.army, levels: e.levels, formation: e.formation };
+    const oppId = target?.playerId ?? "guardian";
+    const after = (rec: BattleRecord) => {
+      if (target && !target.bot && rec.result.winner === "defender") feed({ kind: "defend", text: `${target.name} held off ${e.name} in ${b.id} (+${DEFENSE_POINTS} defense)`, bounty: b.id, player: target.playerId });
+      return rec;
+    };
+    if (!target || target.bot) after(fight(b, botAtk, oppId)); // rival warlords among themselves stay off-chain
+    else {
+      // a rival attacking a real player: the chain decides, and it is applied when it answers
+      const run = runBattle({ kind: "bounty", context: b.id, attacker: botAtk as any, defender: defenderFor(b, e.playerId, oppId), atkPlayer: null, defPlayer: null }, (d) => {
+        if (db.data.bounties[b.id]?.status !== "active") throw new GameError("The bounty ended first.");
+        return after(fight(b, botAtk, oppId, d));
+      });
+      if (run instanceof Promise) run.catch(() => {});
+    }
     void window;
   }
 }

@@ -8,6 +8,7 @@ import { $, act, cents, closeSheet, currentSheet, esc, fmt, openSheet, pct, time
 import { openBattle } from "./battle.js";
 import { changeTag, oddsChart, plainOdds } from "../odds-chart.js";
 import { planPicker } from "./formation.js";
+import { decideBattle } from "../chainwait.js";
 
 let cur = null; // { id, data, view: "info" | "prep", sig }
 const STATUS = { upcoming: "Upcoming", active: "Active", revealed: "Question revealed", resolved: "Settled" };
@@ -341,7 +342,7 @@ async function renderPrep(G) {
   });
   body.querySelector("#go-fight").addEventListener("click", (e) =>
     act(e.currentTarget, async () => {
-      const r = await api(`/api/bounties/${d.id}/attack`, { body: { opponent: target, ...plan() } });
+      const r = await decideBattle(() => api(`/api/bounties/${d.id}/attack`, { body: { opponent: target, ...plan() } }));
       cur.data = r.bounty;
       cur.view = "info";
       closeSheet();
