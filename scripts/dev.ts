@@ -26,6 +26,8 @@ function run(name: string, script: string, quiet = false): ChildProcess {
   pipe(child.stderr!);
   child.on("exit", (code) => {
     if (!stopping && code) console.log(`${tag} exited with code ${code}`);
+    // a dead server/chain/mock must not leave a zombie supervisor behind: exit so the host restarts us
+    if (!stopping && code && name !== "setup" && name !== "stream") stop(code);
   });
   return child;
 }
