@@ -7,10 +7,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-stakeclash = "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e"
+stakeclash = "3bXC59d9UQihNDpY17QFbQTf9WavttgpdtfGfMRuGLAs"
 
 [programs.devnet]
-stakeclash = "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e"
+stakeclash = "3bXC59d9UQihNDpY17QFbQTf9WavttgpdtfGfMRuGLAs"
 
 [provider]
 cluster = "devnet"

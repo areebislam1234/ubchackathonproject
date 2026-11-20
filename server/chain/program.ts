@@ -16,7 +16,7 @@ function declaredId(): string {
   } catch {
     /* source not shipped with this build */
   }
-  return "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e";
+  return "3bXC59d9UQihNDpY17QFbQTf9WavttgpdtfGfMRuGLAs";
 }
 export const PROGRAM_ID = (process.env.STAKECLASH_PROGRAM_ID ?? declaredId()) as Address;
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;

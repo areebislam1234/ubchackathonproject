@@ -23,7 +23,7 @@ use events::*;
 use stakeclash_battle as battle;
 use state::*;
 
-declare_id!("HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e");
+declare_id!("3bXC59d9UQihNDpY17QFbQTf9WavttgpdtfGfMRuGLAs");
 
 /// One side of a battle as the game server submits it. For a player side, the program replaces
 /// `levels` with the on-chain profile's and checks every ability is unlocked.
