@@ -149,7 +149,7 @@ Gemini's prediction-markets REST API returns current prices but no odds history,
 
 - **Odds board (O):** the biggest movers over 15 min / 1 h / 6 h / 24 h with sparklines, and a full pixel chart per market with high, low, change and a plain-English line ("YES trades at 62¢, so the market puts this at about a 62% chance").
 - **Charts in context:** a revealed bounty question shows how its odds moved over the last 6 hours; every intelligence report about a market shows its last 24 hours.
-- **The town crier:** when a market moves sharply (8¢ in 10 min with mock Gemini, 4¢ in an hour live), a headline goes up in the realm feed and as a toast for every player ("odds on “BTC above $100,000” jumped from 41¢ to 55¢"). Click the ticker to open that market's chart.
+- **The town crier:** Barnaby the Crier stands in the top-left corner of the screen. When a market moves sharply (8¢ in 10 min with mock Gemini, 4¢ in an hour live) he rings his bell and shouts the headline in a speech bubble; click him to talk, page through his latest news, and jump to that market's chart or a duel on it. Headlines also go up in the realm feed ("odds on “BTC above $100,000” jumped from 41¢ to 55¢"); click the ticker to open that market's chart.
 - **Hot bounties:** a sharp move can stir up the market's realm: a featured bounty around that market appears there, its question sealed like any other.
 - **Duel from any chart:** "Duel on this market in the Colosseum" opens a challenge with that market picked.
 

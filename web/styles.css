@@ -1958,3 +1958,158 @@ label.field select {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── The town crier (top-left character) ────────────────────────────── */
+.crier-npc {
+  position: absolute;
+  top: 84px;
+  left: 12px;
+  display: grid;
+  justify-items: center;
+  padding: 2px 4px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  z-index: 6;
+}
+.crier-npc img {
+  image-rendering: pixelated;
+  filter: drop-shadow(3px 3px 0 rgba(27, 22, 38, 0.55));
+  transform-origin: 50% 100%;
+}
+.crier-npc:hover img,
+.crier-npc:focus-visible img {
+  transform: translateY(-3px);
+}
+.crier-name {
+  margin-top: -2px;
+  padding: 0 6px;
+  font: 400 16px var(--display);
+  color: var(--gold-l);
+  background: var(--night);
+  border: 2px solid var(--outline);
+  text-shadow: 1px 1px 0 var(--outline);
+}
+.crier-npc.has-news .crier-name::after {
+  content: " !";
+  color: var(--gold);
+}
+.crier-npc.ringing img {
+  animation: crier-ring 0.9s steps(6) 2;
+}
+@keyframes crier-ring {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  25% {
+    transform: rotate(-6deg) translateY(-4px);
+  }
+  50% {
+    transform: rotate(5deg) translateY(-2px);
+  }
+  75% {
+    transform: rotate(-3deg) translateY(-4px);
+  }
+}
+.crier-bubble {
+  position: absolute;
+  top: 92px;
+  left: 92px;
+  max-width: min(360px, calc(100vw - 110px));
+  padding: 8px 12px;
+  font: 500 14px var(--ui);
+  color: var(--ink);
+  background: var(--parch);
+  border: var(--px) solid var(--outline);
+  box-shadow: 3px 3px 0 rgba(27, 22, 38, 0.5);
+  cursor: pointer;
+  z-index: 7;
+  animation: bubble-in 0.25s steps(3);
+}
+.crier-bubble::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 14px;
+  border: 6px solid transparent;
+  border-right-color: var(--outline);
+}
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+.crier-talk {
+  position: absolute;
+  top: 84px;
+  left: 92px;
+  width: min(460px, calc(100vw - 104px));
+  padding: 12px 14px;
+  z-index: 8;
+}
+.talk-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.talk-head b {
+  display: block;
+  font: 400 24px var(--display);
+}
+.talk-portrait {
+  image-rendering: pixelated;
+  background: var(--parch-d);
+  border: 2px solid var(--parch-dd);
+  padding: 2px;
+}
+.close-x.small {
+  float: none;
+  margin: 0;
+  position: static;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+}
+.talk-text {
+  min-height: 3.6em;
+  margin: 10px 0;
+  font: 500 16px/1.45 var(--ui);
+  color: var(--ink);
+  cursor: pointer;
+}
+.talk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#toasts {
+  left: 92px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crier-npc.ringing img,
+  .crier-bubble {
+    animation: none;
+  }
+}
+@media (max-width: 560px) {
+  .crier-npc {
+    top: 96px;
+  }
+  .crier-npc img {
+    width: 40px;
+    height: 45px;
+  }
+  .crier-bubble,
+  .crier-talk {
+    top: 100px;
+    left: 64px;
+    width: auto;
+    max-width: calc(100vw - 76px);
+  }
+  #toasts {
+    left: 64px;
+  }
+}

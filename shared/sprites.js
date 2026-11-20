@@ -395,6 +395,27 @@ function colosseum() {
 }
 
 // ── Hand-drawn sprites ─────────────────────────────────────────────────
+// The town crier: tricorn hat, red coat, hand bell raised
+const CRIER = [
+  "...........kk...",
+  "..........kaak..",
+  "...kkkkkk.kaaAk.",
+  "..kKKKKKKk.kAk..",
+  ".kKaaaaaaKk.k...",
+  "kkkkkkkkkkkk.ki.",
+  "...kiiiiiik..ki.",
+  "...kikiikik..ke.",
+  "...kiiiiiik.kek.",
+  "....kieeik.keek.",
+  "...kxxxxxxkkeek.",
+  "..keEeaeEeeeek..",
+  "..keeeaeeeekk...",
+  ".kiEeeaeeEk.....",
+  "..kkeeaeeek.....",
+  "...kEEEEEEk.....",
+  "....kBBkBBk.....",
+  "....kkk.kkk.....",
+];
 const HERO_DOWN = [
   "................",
   ".....kkkkkk.....",
@@ -923,6 +944,7 @@ S.palm = sprite(PALM);
 S.cactus = sprite(CACTUS);
 S.deadtree = sprite(DEADTREE);
 S.bush = BUSH;
+S.crier = sprite(CRIER);
 S.hero_down_0 = sprite(HERO_DOWN);
 S.hero_down_1 = sprite(HERO_DOWN_STEP);
 S.hero_up_0 = sprite(HERO_UP);

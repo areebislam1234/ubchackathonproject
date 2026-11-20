@@ -19,6 +19,7 @@ import { openIntel } from "./screens/intel.js";
 import { openTreasury } from "./screens/treasury.js";
 import { openColosseum } from "./screens/colosseum.js";
 import { openOdds } from "./screens/odds.js";
+import { crierShout, initCrier } from "./crier.js";
 
 // Shared game context handed to every screen.
 export const G = {
@@ -159,6 +160,7 @@ function startGame() {
   setInterval(drawMinimap, 200);
   setInterval(tickPrompt, 1000);
   pollFeed();
+  initCrier(G);
   setTimeout(() => $("help-hint")?.remove(), 14000);
 }
 
@@ -486,7 +488,7 @@ async function pollFeed() {
     $("ticker").classList.toggle("clickable", !!tickerMarket);
     if (first) return;
     for (const it of r.items) {
-      if (it.kind === "crier") (toast(it.text, "crier"), sfx("waystone"));
+      if (it.kind === "crier") crierShout(it);
       if (it.player !== G.me?.id) continue;
       if (it.kind === "chain") toast(it.text, "good");
       if (it.kind === "defend") toast(it.text, "good");
