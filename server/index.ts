@@ -11,6 +11,7 @@ import { GameError, assignDrill, bySession, disband, logout, markExplored, onBad
 import { assignHome, attack, battle, bountyFor, devEnd, devList, devSpawn, devStart, discover, enter, gemini, globalLeaderboard, mapFor, onSeal, opponents, predict, recall, spawnHot, tick, world } from "./bounties";
 import { acceptChallenge, cancelChallenge, colosseumTick, colosseumView, devBotAccept, duelById, issueChallenge, onReceipt } from "./colosseum";
 import { accrueAll, airdrop, devSetPrice, prepareDeposit, submitDeposit, vaultSummary, vaultTick, vaultView, withdrawSol } from "./vault";
+import { fightLog } from "./fightlog";
 import { crierLog, crierTick, flushOdds, marketList, movers, oddsSeries, oddsTick, onHotMarket, sampleNow, windowMs } from "./odds";
 import { clearCombat, grantBadge, resetProgress, revealAll, setPlayer } from "./dev";
 import { challenge, devNextIntel, discoverLairs, lairView, lairsFor } from "./bosses";
@@ -154,6 +155,7 @@ app.get("/api/bounties/:id/opponents", auth, wrap((req) => ({ opponents: opponen
 app.post("/api/bounties/:id/attack", auth, wrap((req) => attack(req.player, String(req.params.id), String(req.body?.opponent ?? "guardian"), req.body?.units ?? {}, { formation: req.body?.formation, preset: req.body?.preset, order: req.body?.order, abilities: req.body?.abilities })));
 app.post("/api/bounties/:id/predict", auth, wrap((req) => predict(req.player, String(req.params.id), req.body?.side, req.body?.confBps, req.body?.stake)));
 app.get("/api/battles/:id", auth, wrap((req) => battle(String(req.params.id))));
+app.get("/api/fights", auth, wrap(() => fightLog()));
 
 // ── Odds over time, movers, the town crier (Gemini prices recorded by the server) ────────────────
 app.get("/api/odds/movers", auth, wrap((req) => ({ window: windowMs(req.query.window), movers: movers(windowMs(req.query.window), 16), crier: crierLog(10), now: Date.now() })));

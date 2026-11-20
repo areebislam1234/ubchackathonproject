@@ -311,12 +311,27 @@ export class WorldView {
         best = { kind: "waystone", town: t };
       }
     }
+    // the Colosseum in Gloryfield: walk up beside its gates (the waystone stands right in front)
+    const arena = this.colosseum();
+    if (arena) {
+      const d = Math.hypot((arena.x + 1) * TILE + 8 - h.x, (arena.y + 1) * TILE + 12 - h.y) - 0.6 * TILE;
+      if (d < bd) {
+        bd = d;
+        best = { kind: "colosseum" };
+      }
+    }
     const key = best ? (best.camp?.id ?? best.lair?.id ?? best.town?.name ?? best.kind) : null;
     if (key !== this.nearKey) {
       this.nearKey = key;
       this.near = best;
       this.hooks.onNear?.(best);
     }
+  }
+
+  /** The Colosseum building (Arena Plains), or null. */
+  colosseum() {
+    this._arena ??= this.world.structures.find((x) => x.kind === "colosseum") ?? false;
+    return this._arena || null;
   }
 
   interact() {
@@ -403,6 +418,13 @@ export class WorldView {
         return;
       }
     }
+    const arena = this.colosseum();
+    if (arena && tx >= arena.x && tx <= arena.x + 2 && ty >= arena.y - 2 && ty <= arena.y + 1) {
+      if (this.near?.kind === "colosseum") return this.interact();
+      this.setCourse(arena.x + 2, arena.y + 2);
+      this.pendingColosseum = true;
+      return;
+    }
     if (this.home && Math.abs(tx - this.home.x) <= 1 && ty <= this.home.y && ty >= this.home.y - 2) {
       if (this.near?.kind === "home") return this.interact();
       this.setCourse(this.home.x, this.home.y + 1);
@@ -417,6 +439,7 @@ export class WorldView {
     }
     this.pendingCamp = null;
     this.pendingLair = null;
+    this.pendingColosseum = false;
     this.setCourse(tx, ty);
   }
 

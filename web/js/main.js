@@ -20,6 +20,7 @@ import { openVault } from "./screens/vault.js";
 import { openDossiers, openEconomy, openPublicProfile } from "./screens/economy.js";
 import { openColosseum } from "./screens/colosseum.js";
 import { openOdds } from "./screens/odds.js";
+import { openFights } from "./screens/fights.js";
 import { crierShout, initCrier } from "./crier.js";
 
 // Shared game context handed to every screen.
@@ -44,6 +45,7 @@ export const G = {
   openDossiers: () => openDossiers(G),
   openColosseum: (opts) => openColosseum(G, opts),
   openProfile: () => openProfile(G),
+  openFights: () => openFights(G),
   openVault: () => openVault(G),
   openOdds: (market) => openOdds(G, market),
   travelTo,
@@ -65,6 +67,10 @@ G.view = new WorldView($("world"), G.world, {
       const id = G.view.pendingCamp;
       G.view.pendingCamp = null;
       openBounty(G, id);
+    }
+    if (G.view.pendingColosseum) {
+      G.view.pendingColosseum = false;
+      openColosseum(G);
     }
     if (G.view.pendingLair) {
       const id = G.view.pendingLair;
@@ -313,6 +319,8 @@ function tickPrompt() {
     const l = G.lairs.find((x) => x.id === t.lair.id) ?? t.lair;
     const wait = (l.readyAt ?? 0) - G.now();
     el.innerHTML = `<kbd>E</kbd><span class="p-main">${esc(l.name)}</span><span>${esc(l.tierName ?? l.tier)} boss · ${wait > 0 ? `back in ${timeLeft(wait)}` : "ready to fight"}</span>`;
+  } else if (t.kind === "colosseum") {
+    el.innerHTML = `<kbd>E</kbd><span class="p-main">The Colosseum</span><span>1v1 duels for Might on live Gemini markets</span>`;
   } else if (t.kind === "home") {
     el.innerHTML = `<kbd>E</kbd><span class="p-main">Your fortress</span><span>Keep level ${G.me.buildings.keep} · upgrade buildings and train troops</span>`;
   } else {
@@ -327,6 +335,7 @@ async function onInteract(t) {
   if (t.kind === "camp") return openBounty(G, t.camp.id);
   if (t.kind === "lair") return openLair(G, t.lair.id);
   if (t.kind === "home") return openFortress(G);
+  if (t.kind === "colosseum") return openColosseum(G);
   if (t.kind === "waystone") {
     if (!G.me.attuned.includes(t.town.name)) {
       const r = await api("/api/attune", { body: { town: t.town.name } }).catch(() => null);
@@ -519,6 +528,7 @@ $("btn-ledger").addEventListener("click", () => openEconomy(G));
 $("btn-profile").addEventListener("click", () => openProfile(G));
 $("btn-arena").addEventListener("click", () => openColosseum(G));
 $("btn-odds").addEventListener("click", () => openOdds(G));
+$("btn-fights").addEventListener("click", () => openFights(G));
 $("btn-dev").addEventListener("click", () => openDev(G));
 $("hud-chief").addEventListener("click", () => openProfile(G));
 $("sheet-close").addEventListener("click", closeSheet);
@@ -552,6 +562,7 @@ addEventListener("keydown", (e) => {
   if (k === "k") openColosseum(G);
   if (k === "o") openOdds(G);
   if (k === "l") openEconomy(G);
+  if (k === "g") openFights(G);
 });
 
 // Pause walking while any overlay is up.

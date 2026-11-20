@@ -2261,6 +2261,8 @@ label.field select {
 @media (prefers-reduced-motion: reduce) {
   .chain-spin {
     animation: none;
+  }
+}
 
 /* ── SOL vault ──────────────────────────────────────────────────────── */
 .vault-head {
@@ -2312,5 +2314,46 @@ label.field select {
 @media (max-width: 560px) {
   .vault-facts {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Battle board ───────────────────────────────────────────────────── */
+#btn-fights.fights-btn {
+  position: absolute;
+  top: 318px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font: 400 18px var(--display);
+  color: var(--gold-l);
+  cursor: pointer;
+}
+.fights-btn kbd {
+  font-size: 11px;
+  opacity: 0.7;
+}
+table.fights .win {
+  color: var(--green-d);
+}
+table.fights .lose {
+  color: var(--red-d);
+}
+@media (max-width: 560px) {
+  .fights-btn {
+    top: auto;
+    bottom: 140px;
+  }
+}
+@media (max-width: 1499px) {
+  .ticker {
+    max-width: min(340px, calc(100vw - 24px));
+  }
+}
+@media (max-width: 560px) {
+  #btn-fights.fights-btn {
+    top: auto;
+    bottom: 140px;
   }
 }

@@ -70,6 +70,7 @@ function render(G) {
       <div class="fact"><b>${fmt(d.stats.steelWins)}</b><span>Steel wins</span></div>
       <div class="fact"><b>${fmt(d.stats.foresightWins)}</b><span>Foresight wins</span></div>
     </div>
+    ${atArena(G) ? "" : `<div class="row"><button class="btn btn-small btn-blue" id="c-go">${icon("map", 1)} ${G.me.attuned?.includes("Gloryfield") ? "Travel to the Colosseum (Gloryfield)" : "Walk to the Colosseum (Gloryfield, Arena Plains)"}</button><button class="btn btn-small btn-ghost" id="c-board">${icon("swords", 1)} Battle board</button><span class="note">The arena stands in Gloryfield. You can manage duels from anywhere.</span></div>`}
     <div class="chips" style="margin:10px 0">${TABS.map(([k, l]) => `<button class="chip" data-tab="${k}" aria-pressed="${!st.answering && st.tab === k}">${l}</button>`).join("")}</div>
     <div id="colo-tab">${st.answering ? answerForm(G) : st.tab === "issue" ? issueForm(G) : st.tab === "mine" ? mine(G) : st.tab === "ranks" ? ranks(G) : boardTab(G)}</div>`;
   const body = openSheet("colosseum", html);
@@ -254,7 +255,28 @@ function ranks() {
 }
 
 // ── Wiring ────────────────────────────────────────────────────────────
+/** Is the hero standing at the Colosseum in Gloryfield? */
+function atArena(G) {
+  const a = G.view?.colosseum?.();
+  if (!a) return false;
+  const hx = Math.floor(G.view.hero.x / 16);
+  const hy = Math.floor((G.view.hero.y - 2) / 16);
+  return Math.abs(hx - (a.x + 1)) <= 4 && Math.abs(hy - (a.y + 1)) <= 4;
+}
+
 function wire(G, body) {
+  body.querySelector("#c-board")?.addEventListener("click", () => G.openFights());
+  body.querySelector("#c-go")?.addEventListener("click", () => {
+    const a = G.view.colosseum();
+    const town = G.world.towns.find((t) => t.name === "Gloryfield");
+    closeSheet();
+    if (town && G.me.attuned?.includes("Gloryfield")) {
+      G.travelTo(town);
+      return;
+    }
+    if (a && G.setCourse(a.x + 2, a.y + 2)) G.view.pendingColosseum = true;
+    else toast("Couldn't find a path to Gloryfield from here. Use the map (M) to travel.", "bad");
+  });
   for (const b of body.querySelectorAll("[data-tab]"))
     b.addEventListener("click", async () => {
       st.tab = b.dataset.tab;
