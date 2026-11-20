@@ -234,10 +234,11 @@ Gemini's prediction-markets REST API returns current prices but no odds history,
 
 ## How Fortune Front uses Solana
 
-Everything on-chain uses existing Solana programs; Fortune Front deploys no program of its own.
+Fortune Front has its own Solana program (smart contract), written in Rust with Anchor and deployed on devnet, alongside the standard Solana programs below.
 
 | Program | ID | What Fortune Front does with it |
 |---|---|---|
+| **Fortune Front** (our contract, `programs/stakeclash`) | `3bXC59d9UQihNDpY17QFbQTf9WavttgpdtfGfMRuGLAs` | Gold and Might as SPL tokens with custodial player accounts, player profiles (unit levels, abilities, formation, battle records), stakes held in escrow, and on-chain battles (`resolve_battle`, seeded from SlotHashes). Every instruction emits an event the QuickNode indexer reads. See [programs/README.md](programs/README.md). |
 | SPL Token-2022 | `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` | Each badge (First Blood, Boss Slayer, Gladiator…) is its own mint with the **MetadataPointer** and **TokenMetadata** extensions: name, symbol and image live on the mint. One badge is minted to a player's wallet when earned. |
 | SPL Token | `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` | **Devnet USDC** (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, Circle's devnet mint) for Treasury deposits and withdrawals |
 | Associated Token Account | `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` | Creates each player's badge and USDC accounts (idempotent) |
