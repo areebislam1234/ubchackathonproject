@@ -1333,3 +1333,61 @@ code {
   border-color: var(--gold-d);
   background: #fff3a6;
 }
+
+/* bag */
+.dock-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 20px;
+  padding: 0 4px;
+  background: var(--red);
+  color: #fff;
+  border: 2px solid var(--outline);
+  font: 400 15px/16px var(--display);
+  text-align: center;
+}
+.bag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.bag-slot {
+  position: relative;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  background: var(--parch-d);
+  border: var(--px) solid var(--parch-dd);
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+.bag-slot.empty {
+  opacity: 0.4;
+}
+.bag-slot.rare {
+  border-color: var(--blue-l);
+}
+.bag-slot.epic {
+  border-color: var(--crystal);
+}
+.bag-slot.legendary {
+  border-color: var(--gold-d);
+  background: #fff3a6;
+}
+.bag-slot.on {
+  outline: var(--px) solid var(--outline);
+  background: #fdf0c4;
+}
+.bag-slot:focus-visible {
+  outline: var(--px) solid var(--blue);
+}
+.bag-n {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font: 400 18px var(--display);
+  color: var(--outline);
+  text-shadow: 1px 1px 0 #fff;
+}

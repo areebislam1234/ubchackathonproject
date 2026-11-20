@@ -14,6 +14,7 @@ import { openProfile } from "./screens/profile.js";
 import { battleOpen } from "./screens/battle.js";
 import { openDev } from "./screens/dev.js";
 import { openLair, refreshLairSheet } from "./screens/lair.js";
+import { openInventory, unseenCount } from "./screens/inventory.js";
 
 // Shared game context handed to every screen.
 export const G = {
@@ -205,7 +206,16 @@ function renderHud() {
   $("crystal-val").textContent = fmt(m.crystals);
   G.view.setAttuned(m.attuned);
   G.view.setHome(m.home, m.buildings.keep);
+  renderBagBadge();
 }
+
+function renderBagBadge() {
+  const n = G.me ? unseenCount(G.me) : 0;
+  const el = $("bag-badge");
+  el.hidden = !n;
+  el.textContent = n > 99 ? "99+" : String(n);
+}
+G.renderBagBadge = renderBagBadge;
 
 // ── Exploration ───────────────────────────────────────────────────────
 const pending = new Set();
@@ -470,6 +480,7 @@ async function pollFeed() {
 $("btn-map").addEventListener("click", () => openMap(G));
 $("btn-fortress").addEventListener("click", () => openFortress(G));
 $("btn-army").addEventListener("click", () => openArmy(G));
+$("btn-bag").addEventListener("click", () => openInventory(G));
 $("btn-profile").addEventListener("click", () => openProfile(G));
 $("btn-dev").addEventListener("click", () => openDev(G));
 $("hud-chief").addEventListener("click", () => openProfile(G));
@@ -497,6 +508,7 @@ addEventListener("keydown", (e) => {
   if (k === "`" && G.cfg.devTools) openDev(G);
   if (k === "f") openFortress(G);
   if (k === "r") openArmy(G);
+  if (k === "b") openInventory(G);
   if (k === "p") openProfile(G);
 });
 

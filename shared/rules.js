@@ -247,6 +247,27 @@ export const RELICS = {
 };
 export const RELIC_KEYS = Object.keys(RELICS);
 
+/** Combined passive bonuses of the relics a player owns. */
+export function relicEffects(relics = {}) {
+  const fx = { vault: 0, towers: 0, dmg: {} };
+  for (const id of Object.keys(relics ?? {})) {
+    const e = RELICS[id]?.effect;
+    if (!e) continue;
+    fx.vault += e.vault ?? 0;
+    fx.towers += e.towers ?? 0;
+    for (const [k, v] of Object.entries(e.dmg ?? {})) fx.dmg[k] = (fx.dmg[k] ?? 0) + v;
+  }
+  return fx;
+}
+/** Vault capacity including relic bonuses. */
+export const vaultCapWith = (vault, fx) => Math.round(vaultCapacity(vault) * (1 + (fx?.vault ?? 0)));
+/** How many materials an upgrade can use and the gold they save. */
+export function materialDiscount(goldCost, have) {
+  const max = Math.floor(((goldCost ?? 0) * MATERIAL_MAX_SHARE) / MATERIAL_GOLD_VALUE);
+  const use = Math.max(0, Math.min(max, have ?? 0));
+  return { materials: use, gold: use * MATERIAL_GOLD_VALUE };
+}
+
 const tierIndex = (t) => BOSS_TIER_KEYS.indexOf(t);
 const between = (rnd, [lo, hi]) => lo + Math.floor(rnd() * (hi - lo + 1));
 function weighted(rnd, weights) {
@@ -316,6 +337,10 @@ export const BADGES = {
   cartographer: { name: "Cartographer", desc: "Discover 10 bounties.", icon: "map" },
   warlord: { name: "Warlord", desc: "Win 10 battles.", icon: "shield" },
   stronghold: { name: "Stronghold", desc: "Raise your Keep to level 3.", icon: "castle" },
+  "boss-slayer": { name: "Boss Slayer", desc: "Defeat a boss in its lair.", icon: "skull" },
+  "giant-killer": { name: "Giant Killer", desc: "Defeat a Legendary boss.", icon: "sword" },
+  "relic-hunter": { name: "Relic Hunter", desc: "Own 3 relics.", icon: "chest" },
+  spymaster: { name: "Spymaster", desc: "Collect 10 intelligence reports.", icon: "scroll" },
 };
 export const BADGE_IDS = Object.keys(BADGES);
 

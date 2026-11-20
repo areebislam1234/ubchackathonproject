@@ -1,8 +1,8 @@
 // Dev tools for demos: edit your own warlord and steer the world. Off when DEV_TOOLS=off.
-import { BADGES, BUILDINGS, START, UNIT_KEYS } from "../shared/rules.js";
+import { BADGES, BUILDINGS, MATERIAL_KEYS, RELICS, START, UNIT_KEYS } from "../shared/rules.js";
 import { FOG_H, FOG_W } from "../shared/world.js";
 import { db, type Player } from "./db";
-import { GameError, award } from "./players";
+import { GameError, award, inventory } from "./players";
 import { discover, world } from "./bounties";
 import { discoverLairs } from "./bosses";
 
@@ -23,6 +23,13 @@ export function setPlayer(p: Player, body: any) {
   }
   for (const [k, v] of Object.entries(body.army ?? {})) if (UNIT_KEYS.includes(k)) p.army[k] = clamp(v, 0, 999);
   for (const [k, v] of Object.entries(body.unitLevels ?? {})) if (UNIT_KEYS.includes(k)) p.unitLevels[k] = clamp(v, 1, 5);
+  if (body.inventory) {
+    const inv = inventory(p);
+    for (const [k, v] of Object.entries(body.inventory.materials ?? {})) if (MATERIAL_KEYS.includes(k)) inv.materials[k] = clamp(v, 0, 9999);
+    for (const [k, v] of Object.entries(body.inventory.manuals ?? {})) if (UNIT_KEYS.includes(k)) inv.manuals[k] = clamp(v, 0, 999);
+    if (body.inventory.scrolls !== undefined) inv.scrolls = clamp(body.inventory.scrolls, 0, 999);
+    for (const id of body.inventory.relics ?? []) if (id in RELICS) inv.relics[id] ??= { at: Date.now(), from: "dev" };
+  }
   db.save();
 }
 
@@ -56,5 +63,6 @@ export function resetProgress(p: Player) {
   p.lastCombatAt = 0;
   delete p.bosses;
   delete p.bossClaims;
+  delete p.inventory;
   db.save();
 }

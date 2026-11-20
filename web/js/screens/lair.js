@@ -1,6 +1,6 @@
 // A boss lair: who lives here, how strong it is, and what it guards.
 import { armyPower } from "/shared/battle.js";
-import { INTEL_CATEGORIES, UNITS, UNIT_KEYS } from "/shared/rules.js";
+import { INTEL_CATEGORIES, MATERIALS, RELICS, UNITS, UNIT_KEYS } from "/shared/rules.js";
 import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
@@ -128,6 +128,13 @@ async function fight(G) {
 export function lootHtml(r) {
   if (!r.win) return `<p class="note">The boss drove you off. It retreats to its den for a while; train up and come back.</p>`;
   const l = r.loot ?? {};
-  const parts = [`${icon("coin", 2)} <b>${fmt(l.goldLanded ?? l.gold ?? 0)}</b> gold${l.goldLanded < l.gold ? ` (vault full: ${fmt(l.gold - l.goldLanded)} lost)` : ""}`];
-  return `<div class="loot-list">${parts.map((x) => `<div class="loot-item">${x}</div>`).join("")}</div>`;
+  const parts = [[`${icon("coin", 2)} <b>${fmt(l.goldLanded ?? l.gold ?? 0)}</b> gold${l.goldLanded < l.gold ? ` (vault full: ${fmt(l.gold - l.goldLanded)} lost)` : ""}`, ""]];
+  const mats = Object.entries(l.materials ?? {}).filter(([, n]) => n);
+  if (mats.length) parts.push([`${icon("chest", 2)} ${mats.map(([k, n]) => `<b>${n}</b> ${esc(MATERIALS[k].name)}`).join(", ")}`, ""]);
+  const mans = Object.entries(l.manuals ?? {}).filter(([, n]) => n);
+  if (mans.length) parts.push([`${icon("scroll", 2)} ${mans.map(([k, n]) => `<b>${n}</b> ${esc(UNITS[k].name)} manual${n > 1 ? "s" : ""}`).join(", ")}`, "rare"]);
+  if (l.scrolls) parts.push([`${icon("star", 2)} <b>Upgrade scroll</b>: a free level for any unit`, "epic"]);
+  if (l.relic) parts.push([`${icon("crown", 2)} Relic: <b>${esc(RELICS[l.relic].name)}</b>. ${esc(RELICS[l.relic].desc)}`, "legendary"]);
+  if (l.intel) parts.push([`${icon("eye", 2)} <b>${esc(l.intel.rarity[0].toUpperCase() + l.intel.rarity.slice(1))} intelligence report</b> recovered. Open Intel (I) to read it.`, l.intel.rarity]);
+  return `<div class="loot-list">${parts.map(([x, cls]) => `<div class="loot-item ${cls}">${x}</div>`).join("")}</div><p class="note">Loot goes to your Bag (B).</p>`;
 }

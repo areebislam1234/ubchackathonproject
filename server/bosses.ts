@@ -2,11 +2,11 @@
 import crypto from "node:crypto";
 import { armyPower, simulate } from "../shared/battle.js";
 import { mulberry32 } from "../shared/rng.js";
-import { BOSSES, BOSS_TIERS, UNIT_KEYS, bossArmy, rollLoot } from "../shared/rules.js";
+import { BOSSES, BOSS_TIERS, RELICS, UNIT_KEYS, bossArmy, rollLoot } from "../shared/rules.js";
 import { FOG_CELL, FOG_W, REALMS, SIGHT } from "../shared/world.js";
 import { lairs } from "./bounties";
 import { db, feed, type BattleRecord, type Player } from "./db";
-import { GameError, addGold, award, exploredBytes } from "./players";
+import { GameError, addGold, award, boostsOf, exploredBytes, inventory } from "./players";
 
 const now = () => Date.now();
 export const lairById = new Map(lairs.map((l) => [l.id, l]));
@@ -110,14 +110,15 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
 
   const army = bossArmy(l.boss);
   const seed = crypto.randomBytes(4).readUInt32LE(0);
-  const result = simulate({ attacker: { units: sent, levels: p.unitLevels }, defender: army, seed });
+  const boosts = boostsOf(p);
+  const result = simulate({ attacker: { units: sent, levels: p.unitLevels, boosts }, defender: army, seed });
   const rec: BattleRecord = {
     id: `F-${++db.data.meta.battleSeq}`,
     bounty: `lair:${id}`,
     boss: id,
     at: now(),
     seed,
-    attacker: { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels } },
+    attacker: { id: p.id, name: p.name, units: sent, levels: { ...p.unitLevels }, ...(boosts ? { boosts } : {}) },
     defender: { id: `boss:${id}`, name: boss.name, units: army.units, levels: army.levels, towers: army.towers, champions: army.champions },
     result,
   };
@@ -133,6 +134,8 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
     award(p, "first-blood");
     if (p.stats.wins >= 10) award(p, "warlord");
     st.kills[id] = (st.kills[id] ?? 0) + 1;
+    award(p, "boss-slayer");
+    if (boss.tier === "legendary") award(p, "giant-killer");
     loot = grantLoot(p, l.boss, seed, opts.forceIntel ?? null);
     feed({ kind: "boss", text: `${p.name} defeated ${boss.name} (${tier.name})`, player: p.id });
   }
@@ -147,7 +150,16 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
 /** Roll and pay a boss's loot. Server-side only; the roll is seeded from the battle. */
 function grantLoot(p: Player, bossKey: string, seed: number, forceIntel: string | null) {
   const boss = (BOSSES as any)[bossKey];
-  const loot = rollLoot(boss.tier, mulberry32((seed ^ 0x10075eed) >>> 0), { forceIntel });
-  const gold = addGold(p, loot.gold);
-  return { ...loot, goldLanded: gold };
+  const inv = inventory(p);
+  const loot = rollLoot(boss.tier, mulberry32((seed ^ 0x10075eed) >>> 0), { forceIntel, owned: inv.relics });
+  const goldLanded = addGold(p, loot.gold);
+  for (const [k, n] of Object.entries(loot.materials)) inv.materials[k] = (inv.materials[k] ?? 0) + (n as number);
+  for (const [k, n] of Object.entries(loot.manuals)) inv.manuals[k] = (inv.manuals[k] ?? 0) + (n as number);
+  inv.scrolls += loot.scrolls;
+  if (loot.relic) {
+    inv.relics[loot.relic] = { at: now(), from: bossKey };
+    feed({ kind: "boss", text: `${p.name} claimed the ${(RELICS as any)[loot.relic].name} from ${boss.name}`, player: p.id });
+    if (Object.keys(inv.relics).length >= 3) award(p, "relic-hunter");
+  }
+  return { ...loot, goldLanded };
 }

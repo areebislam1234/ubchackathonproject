@@ -37,6 +37,14 @@ export type Player = {
   // Boss lairs. Optional so saves from before bosses existed load unchanged.
   bosses?: { discovered: string[]; cooldowns: Record<string, number>; kills: Record<string, number> };
   bossClaims?: Record<string, { at: number; response: unknown }>; // challenge requestId → result (idempotency)
+  inventory?: Inventory;
+};
+
+export type Inventory = {
+  materials: Record<string, number>; // timber, stone, iron
+  manuals: Record<string, number>; // per unit type: one free level each
+  scrolls: number; // a free level for any unit
+  relics: Record<string, { at: number; from: string }>;
 };
 
 export type Entry = {
@@ -51,6 +59,7 @@ export type Entry = {
   army: UnitMap;
   levels: UnitMap;
   towers: number;
+  boosts?: Record<string, number>; // relic damage bonuses, frozen at entry like the army
   botPlan?: number[]; // bots: times of their attacks
 };
 
@@ -109,8 +118,8 @@ export type BattleRecord = {
   bounty: string;
   at: number;
   seed: number;
-  attacker: { id: string; name: string; units: UnitMap; levels: UnitMap };
-  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean; champions?: Champion[] };
+  attacker: { id: string; name: string; units: UnitMap; levels: UnitMap; boosts?: Record<string, number> };
+  defender: { id: string; name: string; units: UnitMap; levels: UnitMap; towers: number; guardian?: boolean; champions?: Champion[]; boosts?: Record<string, number> };
   boss?: string; // lair id, for boss fights (bounty is then "lair:<id>")
   result: { winner: string; ticks: number; destruction: number; survival: number; score: number; lost: UnitMap };
 };

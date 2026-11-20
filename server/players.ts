@@ -1,8 +1,23 @@
 // Player accounts, the fortress economy, exploration and badges.
 import crypto from "node:crypto";
-import { BADGES, BUILDINGS, START, UNITS, UNIT_KEYS, armyCapacity, housingOf, unitUpgradeCost, unlockedUnits, upgradeCost, vaultCapacity } from "../shared/rules.js";
+import {
+  BADGES,
+  BUILDINGS,
+  MATERIAL_KEYS,
+  START,
+  UNITS,
+  UNIT_KEYS,
+  armyCapacity,
+  housingOf,
+  materialDiscount,
+  relicEffects,
+  unitUpgradeCost,
+  unlockedUnits,
+  upgradeCost,
+  vaultCapWith,
+} from "../shared/rules.js";
 import { FOG_H, FOG_W } from "../shared/world.js";
-import { db, feed, type Player } from "./db";
+import { db, feed, type Inventory, type Player } from "./db";
 
 /** After attacking you count as "in combat" this long: no recalling home. */
 export const COMBAT_MS = 30_000;
@@ -140,9 +155,25 @@ export function bySession(token: string | undefined): Player | null {
   return id ? (db.data.players[id] ?? null) : null;
 }
 
+// ── Inventory and relics ──────────────────────────────────────────────
+/** The player's bag, created on first use so saves from before loot existed load unchanged. */
+export function inventory(p: Player): Inventory {
+  p.inventory ??= { materials: {}, manuals: {}, scrolls: 0, relics: {} };
+  for (const k of MATERIAL_KEYS) p.inventory.materials[k] ??= 0;
+  return p.inventory;
+}
+export const materialCount = (p: Player) => MATERIAL_KEYS.reduce((s, k) => s + (p.inventory?.materials[k] ?? 0), 0);
+export const relicFx = (p: Player) => relicEffects(p.inventory?.relics ?? {});
+export const vaultCap = (p: Player) => vaultCapWith(p.buildings.vault, relicFx(p));
+/** Relic damage bonuses for the battle simulator, or undefined when there are none. */
+export function boostsOf(p: Player) {
+  const d = relicFx(p).dmg;
+  return Object.keys(d).length ? d : undefined;
+}
+
 /** Add gold, clamped to vault capacity. Returns what actually landed. */
 export function addGold(p: Player, amount: number) {
-  const cap = vaultCapacity(p.buildings.vault);
+  const cap = vaultCap(p);
   const before = p.gold;
   p.gold = Math.max(0, Math.min(cap, p.gold + amount));
   return p.gold - before;
@@ -155,18 +186,33 @@ export function spend(p: Player, cost: { gold?: number; crystals?: number }) {
   p.crystals -= cost.crystals ?? 0;
 }
 
-export function upgradeBuilding(p: Player, building: string) {
+export function upgradeBuilding(p: Player, building: string, opts: { useMaterials?: boolean } = {}) {
   const def = (BUILDINGS as any)[building];
   if (!def || building === "trophy") throw new GameError("That building can't be upgraded.");
   const lvl = p.buildings[building] ?? 1;
   if (lvl >= def.max) throw new GameError(`${def.name} is already at max level.`);
   if (building !== "keep" && lvl >= p.buildings.keep + 1) throw new GameError(`Raise your Keep first: buildings can be at most one level above it (Keep is level ${p.buildings.keep}).`);
-  spend(p, upgradeCost(building, lvl)!);
+  const cost = { ...upgradeCost(building, lvl)! };
+  // Materials from boss loot knock gold off the price (never crystals, never the Keep rule).
+  let used = 0;
+  if (opts.useMaterials && cost.gold) {
+    const d = materialDiscount(cost.gold, materialCount(p));
+    cost.gold -= d.gold;
+    used = d.materials;
+  }
+  spend(p, cost);
+  if (used) {
+    const inv = inventory(p);
+    for (let i = 0; i < used; i++) {
+      const k = MATERIAL_KEYS.reduce((a, b) => (inv.materials[b] > inv.materials[a] ? b : a));
+      inv.materials[k]--;
+    }
+  }
   p.buildings[building] = lvl + 1;
   if (building === "keep" && lvl + 1 >= 3) award(p, "stronghold");
   if (building === "keep") feed({ kind: "upgrade", text: `${p.name} raised their Keep to level ${lvl + 1}`, player: p.id });
   db.save();
-  return { building, level: lvl + 1 };
+  return { building, level: lvl + 1, materialsUsed: used, goldPaid: cost.gold ?? 0 };
 }
 
 export function train(p: Player, unit: string, count: number) {
@@ -191,12 +237,20 @@ export function disband(p: Player, unit: string, count: number) {
   return { unit, count: p.army[unit] };
 }
 
-export function upgradeUnit(p: Player, unit: string) {
+export function upgradeUnit(p: Player, unit: string, opts: { use?: "manual" | "scroll" } = {}) {
   const u = (UNITS as any)[unit];
   if (!u) throw new GameError("Unknown unit.");
   const lvl = p.unitLevels[unit] ?? 1;
   if (lvl >= p.buildings.training) throw new GameError(`Upgrade the Training Grounds to train ${u.name} past level ${lvl}.`);
-  spend(p, { gold: unitUpgradeCost(unit, lvl) });
+  if (opts.use === "manual") {
+    const inv = inventory(p);
+    if (!(inv.manuals[unit] > 0)) throw new GameError(`You have no ${u.name} training manuals.`);
+    inv.manuals[unit]--;
+  } else if (opts.use === "scroll") {
+    const inv = inventory(p);
+    if (!(inv.scrolls > 0)) throw new GameError("You have no upgrade scrolls.");
+    inv.scrolls--;
+  } else spend(p, { gold: unitUpgradeCost(unit, lvl) });
   p.unitLevels[unit] = lvl + 1;
   db.save();
   return { unit, level: lvl + 1 };
@@ -235,6 +289,8 @@ export function award(p: Player, badge: string) {
 /** Everything the client needs about the signed-in player. */
 export function playerView(p: Player) {
   const cap = armyCapacity(p.buildings.barracks);
+  const inv = inventory(p);
+  const mats = materialCount(p);
   const nextCosts = Object.fromEntries(Object.keys(BUILDINGS).map((b) => [b, (p.buildings[b] ?? 1) < (BUILDINGS as any)[b].max ? upgradeCost(b, p.buildings[b] ?? 1) : null]));
   return {
     id: p.id,
@@ -255,10 +311,15 @@ export function playerView(p: Player) {
     badges: p.badges,
     stats: p.stats,
     history: p.history.slice(-20).reverse(),
+    inventory: inv,
+    relicFx: relicFx(p),
+    bossKills: Object.values(p.bosses?.kills ?? {}).reduce((s, n) => s + n, 0),
     derived: {
       capacity: cap,
       housing: housingOf(p.army),
-      vaultCap: vaultCapacity(p.buildings.vault),
+      vaultCap: vaultCap(p),
+      materials: mats,
+      materialDiscount: Object.fromEntries(Object.entries(nextCosts).map(([b, c]) => [b, c?.gold ? materialDiscount(c.gold, mats) : null])),
       unlocked: unlockedUnits(p.buildings.barracks),
       nextCosts,
       unitUpgradeCosts: Object.fromEntries(UNIT_KEYS.map((k) => [k, unitUpgradeCost(k, p.unitLevels[k] ?? 1)])),

@@ -19,7 +19,7 @@ const BOSS_BATTLE_SCALE = { common: 1.15, rare: 1.45, epic: 1.75, legendary: 2.1
 export const battleOpen = () => !$("battle").hidden;
 
 export function openBattle(G, rec, { loot = 0, onDone, doneLabel = "Back to the bounty", lootHtml = "" } = {}) {
-  const sim = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels }, defender: rec.defender, seed: rec.seed, record: true });
+  const sim = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts }, defender: rec.defender, seed: rec.seed, record: true });
   const el = $("battle");
   el.innerHTML = `
     <div class="battle-top"><span class="blue">${esc(rec.attacker.name)}</span><span class="vs">vs</span><span class="red">${esc(rec.defender.name)}</span></div>

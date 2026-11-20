@@ -23,7 +23,7 @@ import { BOSSES } from "../shared/rules.js";
 import { GeminiClient, contractPricesBps, type MarketSummary } from "../gemini/client";
 import { env } from "./config";
 import { db, feed, type BattleRecord, type Bounty, type Entry, type Player } from "./db";
-import { COMBAT_MS, GameError, addGold, award, exploredBytes, newPlayer } from "./players";
+import { COMBAT_MS, GameError, addGold, award, boostsOf, exploredBytes, newPlayer, relicFx } from "./players";
 
 export const world = generateWorld();
 /** Fixed boss lairs (same on every server and browser for this world seed). */
@@ -294,7 +294,7 @@ export function enter(p: Player, id: string) {
 }
 
 function snapshotEntry(p: Player): Entry {
-  return { playerId: p.id, name: p.name, bot: !!p.bot, joinedAt: now(), score: 0, attacks: 0, defense: 0, best: 0, army: { ...p.army }, levels: { ...p.unitLevels }, towers: p.buildings.towers };
+  return { playerId: p.id, name: p.name, bot: !!p.bot, joinedAt: now(), score: 0, attacks: 0, defense: 0, best: 0, army: { ...p.army }, levels: { ...p.unitLevels }, towers: p.buildings.towers + relicFx(p).towers, boosts: boostsOf(p) };
 }
 
 export function opponents(p: Player, id: string) {
@@ -323,7 +323,7 @@ export function attack(p: Player, id: string, opponentId: string, units: Record<
     if (n) sent[k] = n;
   }
   if (!Object.keys(sent).length) throw new GameError("Send at least one unit.");
-  const rec = fight(b, { id: p.id, name: p.name, units: sent, levels: p.unitLevels }, opponentId);
+  const rec = fight(b, { id: p.id, name: p.name, units: sent, levels: p.unitLevels, boosts: boostsOf(p) }, opponentId);
   p.lastCombatAt = now();
   // casualties come out of your army
   for (const [k, n] of Object.entries(rec.result.lost)) p.army[k] = Math.max(0, (p.army[k] ?? 0) - n);
@@ -340,7 +340,7 @@ export function attack(p: Player, id: string, opponentId: string, units: Record<
 }
 
 /** Run one attack inside a bounty and update scores. Used by players and bots. */
-function fight(b: Bounty, atk: { id: string; name: string; units: Record<string, number>; levels: Record<string, number> }, opponentId: string): BattleRecord {
+function fight(b: Bounty, atk: { id: string; name: string; units: Record<string, number>; levels: Record<string, number>; boosts?: Record<string, number> }, opponentId: string): BattleRecord {
   const entry = b.entries[atk.id];
   let defender: BattleRecord["defender"];
   const defEntry = opponentId !== "guardian" ? b.entries[opponentId] : null;
@@ -350,10 +350,10 @@ function fight(b: Bounty, atk: { id: string; name: string; units: Record<string,
   } else {
     if (!defEntry) throw new GameError("That rival isn't in this bounty.");
     if (opponentId === atk.id) throw new GameError("You can't attack yourself.");
-    defender = { id: defEntry.playerId, name: defEntry.name, units: defEntry.army, levels: defEntry.levels, towers: defEntry.towers };
+    defender = { id: defEntry.playerId, name: defEntry.name, units: defEntry.army, levels: defEntry.levels, towers: defEntry.towers, ...(defEntry.boosts ? { boosts: defEntry.boosts } : {}) };
   }
   const seed = crypto.randomBytes(4).readUInt32LE(0);
-  const result = simulate({ attacker: { units: atk.units, levels: atk.levels }, defender, seed });
+  const result = simulate({ attacker: { units: atk.units, levels: atk.levels, boosts: atk.boosts }, defender, seed });
   entry.attacks++;
   entry.score += result.score;
   entry.best = Math.max(entry.best, result.score);
@@ -361,7 +361,7 @@ function fight(b: Bounty, atk: { id: string; name: string; units: Record<string,
     defEntry.defense += DEFENSE_POINTS;
     defEntry.score += DEFENSE_POINTS;
   }
-  const rec: BattleRecord = { id: `F-${++db.data.meta.battleSeq}`, bounty: b.id, at: now(), seed, attacker: { id: atk.id, name: atk.name, units: atk.units, levels: atk.levels }, defender, result };
+  const rec: BattleRecord = { id: `F-${++db.data.meta.battleSeq}`, bounty: b.id, at: now(), seed, attacker: { id: atk.id, name: atk.name, units: atk.units, levels: atk.levels, ...(atk.boosts ? { boosts: atk.boosts } : {}) }, defender, result };
   db.data.battles[rec.id] = rec;
   const verb = result.winner === "attacker" ? "crushed" : "was repelled by";
   feed({ kind: "battle", text: `${atk.name} ${verb} ${defender.name} in ${b.id} (+${result.score})`, bounty: b.id, player: atk.id });

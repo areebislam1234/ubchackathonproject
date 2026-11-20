@@ -36,11 +36,11 @@ export function openArmy(G) {
         const [kind, unit, n] = b.dataset.act.split(":");
         if (kind === "train") await api("/api/army/train", { body: { unit, count: Number(n) } });
         if (kind === "disband") await api("/api/army/disband", { body: { unit, count: Number(n) } });
-        if (kind === "up") {
-          const r = await api("/api/army/upgrade", { body: { unit } });
+        if (kind === "up" || kind === "manual") {
+          const r = await api("/api/army/upgrade", { body: { unit, use: kind === "manual" ? "manual" : undefined } });
           toast(`${UNITS[unit].name} trained to level ${r.level}`, "good");
         }
-        sfx(kind === "up" ? "upgrade" : "coin");
+        sfx(kind === "up" || kind === "manual" ? "upgrade" : "coin");
         await G.refreshMe();
         openArmy(G);
       }),
@@ -71,7 +71,7 @@ function unitCard(G, k) {
       <button class="btn btn-go btn-small" data-act="train:${k}:5" ${room >= u.housing * 5 && m.gold >= u.cost * 5 ? "" : "disabled"}>×5<span class="cost">${u.cost * 5}g</span></button>
       <button class="btn btn-ghost btn-small" data-act="disband:${k}:1" ${n ? "" : "disabled"} title="Free up housing">−1</button>
     </div>
-    <div class="row"><button class="btn btn-blue btn-small" data-act="up:${k}" ${canUp && m.gold >= upCost ? "" : "disabled"}>Level up<span class="cost">${fmt(upCost)}g</span></button>${canUp ? "" : `<span class="note">Training Grounds cap: Lv ${m.buildings.training}</span>`}</div>`
+    <div class="row"><button class="btn btn-blue btn-small" data-act="up:${k}" ${canUp && m.gold >= upCost ? "" : "disabled"}>Level up<span class="cost">${fmt(upCost)}g</span></button>${(m.inventory?.manuals?.[k] ?? 0) > 0 ? `<button class="btn btn-gold btn-small" data-act="manual:${k}" ${canUp ? "" : "disabled"} title="Use a training manual from your Bag">Manual<span class="cost">×${m.inventory.manuals[k]}</span></button>` : ""}${canUp ? "" : `<span class="note">Training Grounds cap: Lv ${m.buildings.training}</span>`}</div>`
     }
   </div>`;
 }

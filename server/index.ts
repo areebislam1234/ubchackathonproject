@@ -161,10 +161,10 @@ app.post(
 );
 
 // ── Fortress and army ─────────────────────────────────────────────────
-app.post("/api/fortress/upgrade", auth, wrap((req) => upgradeBuilding(req.player, String(req.body?.building))));
+app.post("/api/fortress/upgrade", auth, wrap((req) => upgradeBuilding(req.player, String(req.body?.building), { useMaterials: req.body?.useMaterials === true })));
 app.post("/api/army/train", auth, wrap((req) => train(req.player, String(req.body?.unit), Number(req.body?.count ?? 1))));
 app.post("/api/army/disband", auth, wrap((req) => disband(req.player, String(req.body?.unit), Number(req.body?.count ?? 1))));
-app.post("/api/army/upgrade", auth, wrap((req) => upgradeUnit(req.player, String(req.body?.unit))));
+app.post("/api/army/upgrade", auth, wrap((req) => upgradeUnit(req.player, String(req.body?.unit), { use: req.body?.use === "manual" || req.body?.use === "scroll" ? req.body.use : undefined })));
 
 // ── Wallet + badges ───────────────────────────────────────────────────
 app.post("/api/wallet/challenge", auth, wrap((req) => ({ message: walletChallenge(req.player, String(req.body?.address ?? "")) })));

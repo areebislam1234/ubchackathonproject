@@ -132,7 +132,7 @@ try {
   const inCombat = await call(alice.token, "POST", "/api/recall", {});
   ok(inCombat.status === 400 && /combat/.test(inCombat.body.error), "you can't recall home right after a battle");
   const rec = atk.battle;
-  const replay = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels }, defender: rec.defender, seed: rec.seed });
+  const replay = simulate({ attacker: { units: rec.attacker.units, levels: rec.attacker.levels, boosts: rec.attacker.boosts }, defender: rec.defender, seed: rec.seed });
   ok(replay.score === rec.result.score && replay.winner === rec.result.winner && replay.ticks === rec.result.ticks, `the browser replay reproduces the server's battle exactly (${rec.result.winner}, +${rec.result.score})`);
   const me2 = (await call(alice.token, "GET", "/api/me")).body;
   ok(me2.army.infantry === 6 - (rec.result.lost.infantry ?? 0) && me2.army.archer === 4 - (rec.result.lost.archer ?? 0), "fallen units are removed from your army");

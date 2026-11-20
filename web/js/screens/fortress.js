@@ -12,6 +12,8 @@ const SW = 320;
 const SH = 150;
 let selected = "keep";
 
+let useMats = true; // spend boss materials on upgrades when you have them
+
 export function openFortress(G, focus) {
   if (focus) selected = focus;
   const m = G.me;
@@ -23,6 +25,7 @@ export function openFortress(G, focus) {
     <p class="sub">Gold builds walls and armies. Crystals, earned only from well-calibrated predictions, raise the Keep, and the Keep caps everything else at one level above it.</p>
     <canvas class="fort-scene" id="fort" width="${SW * 3}" height="${SH * 3}" aria-label="Your fortress. Click a building."></canvas>
     <div class="row spread" style="margin:10px 0 4px"><span class="note">${icon("coin", 2)} ${fmt(m.gold)} / ${fmt(m.derived.vaultCap)} gold · ${icon("crystal", 2)} ${fmt(m.crystals)} crystals</span><span class="note">Click a building to focus it</span></div>
+    ${m.derived.materials ? `<label class="row note" style="gap:6px;margin:4px 0"><input type="checkbox" id="use-mats" ${useMats ? "checked" : ""}/> Use building materials from your Bag (${fmt(m.derived.materials)} left): each takes 20 gold off, up to half the price</label>` : ""}
     <div class="cards" id="bcards">${Object.keys(BUILDINGS).map((k) => card(G, k)).join("")}</div>
   `,
   );
@@ -42,15 +45,19 @@ export function openFortress(G, focus) {
   for (const btn of body.querySelectorAll("[data-up]"))
     btn.addEventListener("click", (e) =>
       act(e.currentTarget, async () => {
-        const r = await api("/api/fortress/upgrade", { body: { building: btn.dataset.up } });
+        const r = await api("/api/fortress/upgrade", { body: { building: btn.dataset.up, useMaterials: useMats && m.derived.materials > 0 } });
         sfx("upgrade");
-        toast(`${BUILDINGS[r.building].name} is now level ${r.level}`, "good");
+        toast(`${BUILDINGS[r.building].name} is now level ${r.level}${r.materialsUsed ? ` · ${r.materialsUsed} materials saved ${r.materialsUsed * 20} gold` : ""}`, "good");
         await G.refreshMe();
         selected = r.building;
         openFortress(G);
       }),
     );
   body.querySelector("[data-trophy]")?.addEventListener("click", () => openProfile(G, "trophies"));
+  body.querySelector("#use-mats")?.addEventListener("change", (e) => {
+    useMats = e.target.checked;
+    openFortress(G);
+  });
 }
 
 function effect(k, lvl) {
@@ -74,7 +81,9 @@ function card(G, k) {
   const m = G.me;
   const def = BUILDINGS[k];
   const lvl = m.buildings[k] ?? 1;
-  const cost = m.derived.nextCosts[k];
+  const base = m.derived.nextCosts[k];
+  const disc = useMats ? m.derived.materialDiscount?.[k] : null;
+  const cost = base && disc?.materials ? { ...base, gold: base.gold - disc.gold } : base;
   const capped = k !== "keep" && k !== "trophy" && lvl >= m.buildings.keep + 1;
   const afford = cost && m.gold >= (cost.gold ?? 0) && m.crystals >= (cost.crystals ?? 0);
   const btn =
@@ -82,7 +91,7 @@ function card(G, k) {
       ? `<button class="btn btn-gold btn-small" data-trophy>Open the Trophy Room</button>`
       : !cost
         ? `<span class="note">Max level</span>`
-        : `<button class="btn ${k === "keep" ? "btn-crystal" : "btn-go"} btn-small" data-up="${k}" ${afford && !capped ? "" : "disabled"}>Upgrade<span class="cost">${cost.gold ? `${fmt(cost.gold)}g` : ""}${cost.crystals ? ` + ${cost.crystals}◆` : ""}</span></button>${capped ? `<span class="note">Raise the Keep first</span>` : ""}`;
+        : `<button class="btn ${k === "keep" ? "btn-crystal" : "btn-go"} btn-small" data-up="${k}" ${afford && !capped ? "" : "disabled"}>Upgrade<span class="cost">${disc?.materials ? `<s>${fmt(base.gold)}</s> ` : ""}${cost.gold ? `${fmt(cost.gold)}g` : ""}${cost.crystals ? ` + ${cost.crystals}◆` : ""}${disc?.materials ? ` + ${disc.materials}▣` : ""}</span></button>${capped ? `<span class="note">Raise the Keep first</span>` : ""}`;
   return `<div class="card" data-card="${k}" style="${selected === k ? "border-color:var(--wood-d);background:#fdf0c4" : ""}">
     <div class="row spread"><h4>${esc(def.name)}</h4><span class="tag">${k === "trophy" ? "" : `Lv ${lvl}/${def.max}`}</span></div>
     <span class="stats">${esc(def.desc)}</span>
