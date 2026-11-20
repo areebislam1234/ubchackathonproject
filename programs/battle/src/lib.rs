@@ -2,8 +2,7 @@
 //!
 //! Integer arithmetic only, fixed-size arrays, no allocation: it runs inside the Solana program
 //! and must give exactly the same result as the JavaScript engine for the same inputs and seed.
-//! `tests/vectors.rs` checks that against battles recorded from the JavaScript engine.
-#![cfg_attr(not(test), no_std)]
+#![no_std]
 
 extern crate alloc;
 use alloc::boxed::Box;

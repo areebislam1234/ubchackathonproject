@@ -92,12 +92,11 @@ Each ability is unlocked once with Might. Before each fight you **bring up to 2*
 
 ## On-chain program, QuickNode indexer and the Economic Board
 
-Everything that moves value or decides a result belongs to the StakeClash Solana program (`programs/`; build and deploy steps in [programs/README.md](programs/README.md)).
+Everything that moves value or decides a result belongs to the StakeClash Solana program (`programs/`; build and deploy steps in [programs/TEAMMATE.md](programs/TEAMMATE.md)).
 
 - **Gold and Might are SPL tokens.** The program's config PDA is their mint authority and holds each player's custodial account, so buying something burns tokens without a wallet pop-up.
 - **Stakes** for duels (and later bounties) sit in a program vault until they settle.
-- **Battles are resolved on-chain** by a Rust port of battle engine 2, seeded from SlotHashes.
-  - `cargo test -p stakeclash-battle` replays 1,000 battles recorded from the JavaScript engine and must match every one.
+- **Battles are resolved on-chain** by a Rust port of battle engine 2 (`programs/battle`), seeded from SlotHashes. It mirrors `shared/battle2.js` step for step, so the game can replay exactly what the chain decided.
   - Unit levels come from the on-chain profile; abilities must be unlocked there.
 - **Every action emits a versioned event:** registration, Gold settlement, Might minted or burned, unit upgrades, ability unlocks, loadouts and formations, stakes, rewards, yield conversion and battles.
 

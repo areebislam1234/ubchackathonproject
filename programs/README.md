@@ -37,42 +37,15 @@ Two Rust crates:
 
 - **Signers:** the player's wallet, or the game authority, signs the player's own choices (loadout, formation). The game authority signs game-decided actions (battles, rewards, yield conversion, Gold settlement).
 
-## Checks you can run now (Windows is fine)
+## Checks
 
 ```
-npx tsx scripts/battle-vectors.ts            # 1,000 battles from the JS engine → programs/battle/tests/vectors.json
-cargo test -p stakeclash-battle --release    # the Rust engine must match every one exactly
-npx tsx scripts/onchain-check.ts             # event/instruction encoding, log parsing, Streams filter
+npx tsx scripts/onchain-check.ts   # event and instruction encoding, log parsing, Streams filter (no cluster needed)
 ```
 
-On Windows, set `CARGO_TARGET_DIR` to a folder outside OneDrive, for example `%LOCALAPPDATA%\stakeclash-target`.
+## Build and deploy
 
-Smart App Control may block the build scripts of some Solana crates. The program crate builds in WSL; the battle crate builds anywhere.
-
-## Build and deploy (WSL, devnet)
-
-1. In an admin PowerShell, run `wsl --install`, restart, and create the Ubuntu user.
-2. In Ubuntu, install the toolchain:
-   ```
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
-   cargo install --git https://github.com/coral-xyz/anchor avm --force && avm install 0.31.1 && avm use 0.31.1
-   ```
-3. Create the program's address, once (written to `.data/devnet/`, never committed):
-   ```
-   npx tsx scripts/program-keypair.ts
-   ```
-   - Put the printed address in `programs/stakeclash/src/lib.rs` (`declare_id!`) and in `Anchor.toml`.
-   - Also set `STAKECLASH_PROGRAM_ID` in `.env` if it differs from the one in the code.
-4. Fund the authority with about 5 devnet SOL (faucet.solana.com). The program account needs about 3 SOL of rent.
-5. Build and deploy through the QuickNode devnet endpoint:
-   ```
-   anchor build
-   solana program deploy target/deploy/stakeclash.so --program-id .data/devnet/stakeclash-program.json --url "$SOLANA_RPC_URL" --keypair .data/devnet/authority.json
-   NETWORK=devnet npx tsx scripts/init-program.ts
-   ```
-6. **Streams:** regenerate the filter (`npm run print-filter`) and paste it into the QuickNode Stream. It now also forwards the program's transaction logs.
-7. Restart the game server. It finds the config account, switches from local to on-chain mode, and starts sending its queue.
+Building needs macOS or Linux: the Solana compiler doesn't run on Windows. Step-by-step instructions for whoever builds and deploys are in [TEAMMATE.md](TEAMMATE.md).
 
 ## Before mainnet
 

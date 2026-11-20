@@ -2,10 +2,23 @@
 // account addresses (PDAs), instruction builders and the event decoder. Borsh layouts are written
 // as schemas so encoding and decoding share one definition and mirror the Rust structs.
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { AccountRole, getAddressDecoder, getAddressEncoder, getProgramDerivedAddress, type Address, type Instruction } from "@solana/kit";
 import { ABILITY_KEYS, ORDER_KEYS, UNIT_KEYS } from "../../shared/rules.js";
 
-export const PROGRAM_ID = (process.env.STAKECLASH_PROGRAM_ID ?? "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e") as Address;
+/** The program address: STAKECLASH_PROGRAM_ID, else the contract's own declare_id! (one place to change). */
+function declaredId(): string {
+  try {
+    const src = fs.readFileSync(path.join(import.meta.dirname, "..", "..", "programs", "stakeclash", "src", "lib.rs"), "utf8");
+    const m = /declare_id!\("([1-9A-HJ-NP-Za-km-z]{32,44})"\)/.exec(src);
+    if (m) return m[1];
+  } catch {
+    /* source not shipped with this build */
+  }
+  return "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e";
+}
+export const PROGRAM_ID = (process.env.STAKECLASH_PROGRAM_ID ?? declaredId()) as Address;
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
 export const SYSTEM_PROGRAM = "11111111111111111111111111111111" as Address;
 export const RENT_SYSVAR = "SysvarRent111111111111111111111111111111111" as Address;
@@ -170,6 +183,11 @@ export type Mints = { gold: Address; might: Address };
 /** One-time setup after deploy: the config PDA and the Gold and Might mints (fresh keypairs, signers). */
 export async function initializeIx(authority: Address, goldMint: Address, mightMint: Address) {
   return ix("initialize", [], {}, [[authority, "ws"], [await configPda(), "w"], [goldMint, "ws"], [mightMint, "ws"], [TOKEN_PROGRAM, "r"], [SYSTEM_PROGRAM, "r"], [RENT_SYSVAR, "r"]]);
+}
+
+/** Hand the game authority to another key (whoever runs the game server). Signed by the current authority. */
+export async function setAuthorityIx(authority: Address, newAuthority: Address) {
+  return ix("set_authority", [["new_authority", "pubkey"]], { new_authority: newAuthority }, [[authority, "rs"], [await configPda(), "w"]]);
 }
 
 export async function registerPlayerIx(authority: Address, mints: Mints, wallet: Address) {
