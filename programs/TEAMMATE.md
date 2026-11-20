@@ -44,7 +44,7 @@ anchor build
    solana program deploy target/deploy/stakeclash.so \
      --program-id .data/devnet/stakeclash-program.json \
      --keypair .data/devnet/authority.json \
-     --url "$SOLANA_RPC_URL"
+     --url <your QuickNode devnet URL, the same as SOLANA_RPC_URL in .env>
    npm run init-program
    ```
 3. Point QuickNode at the program: run `npm run print-filter` and paste the output into the QuickNode Stream's filter.
