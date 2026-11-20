@@ -68,7 +68,10 @@ function leaderboard(b: Bounty) {
 /** Map pins: exact for discovered bounties, a rumour circle for the rest. */
 export function mapFor(p: Player) {
   const explored = exploredBytes(p);
-  return visibleBounties().map((b) => {
+  // Only camps you can still fight in, plus finished ones you fought in (to make your call).
+  // Ended bounties you weren't part of are hidden, so open camps are easy to find.
+  const shown = visibleBounties().filter((b) => b.status === "upcoming" || b.status === "active" || !!b.entries[p.id]);
+  return shown.map((b) => {
     const base = { id: b.id, tier: b.tier, featured: b.featured, hot: !!b.hot, realm: b.realm, status: b.status, startsAt: b.startsAt, endsAt: b.endsAt, participants: Object.keys(b.entries).length, maxPlayers: TIERS[b.tier].maxPlayers, entered: !!b.entries[p.id] };
     if (isDiscovered(p, b, explored) || b.entries[p.id]) return { ...base, discovered: true, x: b.x, y: b.y };
     return { ...base, discovered: false, rumor: rumorOf(b) };
@@ -234,7 +237,7 @@ async function spawnBounties(first = false) {
   for (let k = 0; k < (first ? want : Math.min(want, 2)); k++) {
     const counts = REALMS.map((r) => ({ id: r.id, n: live().filter((b) => b.realm === r.id).length + rnd() * 0.5 }));
     counts.sort((a, b) => a.n - b.n);
-    spawnIn(counts[0].id, markets, { activeNow: false, first });
+    spawnIn(counts[0].id, markets, { activeNow: true, first }); // replacements open at once: no waiting for a camp
   }
   db.save();
 }
