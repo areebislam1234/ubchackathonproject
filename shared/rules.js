@@ -426,6 +426,13 @@ export const RELICS = {
 };
 export const RELIC_KEYS = Object.keys(RELICS);
 
+/**
+ * Information Relic: the Spyglass of the Watch. Dropped by rare and stronger bosses; using one on a
+ * rival reveals their Warlord dossier (formations, orders, abilities and tendencies, from their
+ * indexed battle history). That intel is only available this way.
+ */
+export const INFO_RELIC = { name: "Spyglass of the Watch", desc: "Use it on a rival warlord to read their Warlord dossier: how they line up, which orders and abilities they favour, and how to beat them.", chance: { common: 0, rare: 0.2, epic: 0.35, legendary: 0.5 } };
+
 /** Combined passive bonuses of the relics a player owns. */
 export function relicEffects(relics = {}) {
   const fx = { vault: 0, towers: 0, dmg: {} };
@@ -467,14 +474,16 @@ function weighted(rnd, weights) {
  */
 export function rollLoot(tier, rnd, { owned = {}, forceIntel = null } = {}) {
   const t = BOSS_TIERS[tier];
-  /** @type {{ drills: number, relic: string | null, intel: { rarity: string } | null }} */
-  const loot = { drills: DRILLS.perTier[tier] ?? 0, relic: null, intel: null };
+  /** @type {{ drills: number, relic: string | null, intel: { rarity: string } | null, spyglass: boolean }} */
+  const loot = { drills: DRILLS.perTier[tier] ?? 0, relic: null, intel: null, spyglass: false };
   if (rnd() < t.loot.relic) {
     const pool = RELIC_KEYS.filter((k) => tierIndex(RELICS[k].minTier) <= tierIndex(tier) && !owned[k]);
     if (pool.length) loot.relic = pool[Math.floor(rnd() * pool.length)];
   }
   if (forceIntel) loot.intel = { rarity: forceIntel };
   else if (rnd() < t.intel.chance) loot.intel = { rarity: weighted(rnd, t.intel.rarity) };
+  // rolled last, so the rolls above stay exactly as they were
+  if (rnd() < (INFO_RELIC.chance[tier] ?? 0)) loot.spyglass = true;
   return loot;
 }
 

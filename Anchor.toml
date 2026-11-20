@@ -1,0 +1,19 @@
+[toolchain]
+anchor_version = "0.31.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+stakeclash = "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e"
+
+[programs.devnet]
+stakeclash = "HphrUivPnkvqVxQBv8pWQC9rrrg8T1NMbTrQ3Degyf6e"
+
+[provider]
+cluster = "devnet"
+wallet = ".data/devnet/authority.json"
+
+[scripts]
+test = "npx tsx scripts/battle-vectors.ts && cargo test -p stakeclash-battle --release"

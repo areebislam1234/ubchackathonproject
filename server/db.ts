@@ -40,6 +40,7 @@ export type Player = {
   bossClaims?: Record<string, { at: number; response: unknown }>; // challenge requestId → result (idempotency)
   inventory?: Inventory;
   intel?: IntelReport[]; // collected intelligence reports, kept forever
+  dossiers?: { target: string; name: string; at: number; data: unknown }[]; // Warlord dossiers read with a Spyglass
   drills?: Drills;
   // The yield economy (all money in integer micro-USDC). Optional: created on first use.
   funds?: Funds;
@@ -92,6 +93,7 @@ export type Inventory = {
   manuals: Record<string, number>; // per unit type: one free level each
   scrolls: number; // a free level for any unit
   relics: Record<string, { at: number; from: string }>;
+  spyglasses?: number; // Information Relics: each reveals one rival's Warlord dossier
 };
 
 export type Entry = {

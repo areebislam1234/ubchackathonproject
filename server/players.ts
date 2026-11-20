@@ -30,6 +30,7 @@ import {
   vaultCapWith,
 } from "../shared/rules.js";
 import { FOG_H, FOG_W } from "../shared/world.js";
+import * as chain from "./chain/onchain";
 import { db, feed, type Drills, type Formation, type Inventory, type Player } from "./db";
 
 /** After attacking you count as "in combat" this long: no recalling home. */
@@ -133,6 +134,7 @@ export async function register(name: string, password: string) {
   await setPassword(p, pw);
   db.data.usernames[key] = p.id;
   feed({ kind: "join", text: `${p.name} raised a banner in the Crownlands`, player: p.id });
+  chain.onRegister(p);
   return { token: startSession(p), player: p };
 }
 
@@ -231,6 +233,7 @@ export function assignDrill(p: Player, unit: string, count = 1) {
   if (have >= DRILLS.maxPerUnit) throw new GameError(`${u.name} drills are maxed (+${Math.round(drillBonus(have) * 100)}%).`);
   d.units[unit] = have + n;
   d.pool -= n;
+  chain.onDrills(p, unit, n);
   db.save();
   return { unit, points: d.units[unit], pool: d.pool };
 }
@@ -332,8 +335,11 @@ export function upgradeUnit(p: Player, unit: string, opts: { use?: "manual" | "s
     const inv = inventory(p);
     if (!(inv.scrolls > 0)) throw new GameError("You have no upgrade scrolls.");
     inv.scrolls--;
-  } else spend(p, { gold: unitUpgradeCost(unit, lvl) });
+  }
+  const goldCost = opts.use ? 0 : unitUpgradeCost(unit, lvl);
+  if (goldCost) spend(p, { gold: goldCost });
   p.unitLevels[unit] = lvl + 1;
+  chain.onUnitUpgrade(p, unit, lvl + 1, goldCost);
   db.save();
   return { unit, level: lvl + 1 };
 }
@@ -436,6 +442,7 @@ export function unlockAbility(p: Player, id: string) {
   const classOpen = unlockedUnits(p.buildings.barracks).some((u: string) => (UNIT_CLASS as any)[u] === a.cls);
   if (!classOpen) throw new GameError(`${a.name} needs a ${a.cls} unit. Upgrade your Barracks first.`);
   if ((p.might ?? 0) < a.cost) throw new GameError(`${a.name} costs ${a.cost} Might (you have ${p.might ?? 0}). Convert realized yield in the Treasury.`);
+  chain.onAbilityUnlock(p, id, a.cost); // settles Might on-chain first, then burns the price
   p.might = (p.might ?? 0) - a.cost;
   book.unlocked.push(id);
   if (book.loadout.length < MAX_LOADOUT) book.loadout.push(id);
@@ -451,6 +458,7 @@ export function setLoadout(p: Player, list: unknown) {
   if (want.length > MAX_LOADOUT) throw new GameError(`Bring at most ${MAX_LOADOUT} abilities.`);
   for (const k of want) if (!pickable(p, k)) throw new GameError(`${(ABILITIES as any)[k]?.name ?? "That ability"} isn't unlocked.`);
   abilityBook(p).loadout = want;
+  chain.onLoadout(p, want);
   db.save();
   return abilityBook(p).loadout;
 }
@@ -487,6 +495,7 @@ export function setFormation(p: Player, body: any) {
       throw new GameError((e as Error).message);
     }
   }
+  chain.onFormation(p, p.formation);
   db.save();
   return fieldFormation(p);
 }

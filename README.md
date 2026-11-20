@@ -90,6 +90,45 @@ Each ability is unlocked once with Might. Before each fight you **bring up to 2*
 - **Mastery became abilities.** Mastery (+3% per rank, bought with Might) was removed. Every player's Mastery spend was refunded in Might once, when the server started.
 - Numbers live in `shared/rules.js` (`ABILITIES`, `MAX_LOADOUT`). The effects use integer math in `shared/battle2.js`, so they can move on-chain unchanged.
 
+## On-chain program, QuickNode indexer and the Economic Board
+
+Everything that moves value or decides a result belongs to the StakeClash Solana program (`programs/`; build and deploy steps in [programs/README.md](programs/README.md)).
+
+- **Gold and Might are SPL tokens.** The program's config PDA is their mint authority and holds each player's custodial account, so buying something burns tokens without a wallet pop-up.
+- **Stakes** for duels (and later bounties) sit in a program vault until they settle.
+- **Battles are resolved on-chain** by a Rust port of battle engine 2, seeded from SlotHashes.
+  - `cargo test -p stakeclash-battle` replays 1,000 battles recorded from the JavaScript engine and must match every one.
+  - Unit levels come from the on-chain profile; abilities must be unlocked there.
+- **Every action emits a versioned event:** registration, Gold settlement, Might minted or burned, unit upgrades, ability unlocks, loadouts and formations, stakes, rewards, yield conversion and battles.
+
+**How the game uses it** (`server/chain/onchain.ts`):
+- Each action is applied in the game at once and queued as a program instruction. The queue is persisted, ordered and retried until confirmed.
+- Gold and Might use a shadow ledger: explicit actions (upgrades, unlocks, stakes, payouts) adjust it, and a settlement every 30 seconds mints or burns the rest, netting many small changes into one instruction.
+- **Before the program is deployed** the bridge runs in **local mode**. Each action produces the exact event the program would emit, labelled local. The screens below work now, say plainly that their data isn't on-chain yet, and switch to on-chain data when the program goes live.
+- **Not yet:** in on-chain mode the program rolls its own seed, so a battle's on-chain result can differ from the one the game already showed. Making the game wait for (or reconcile with) the chain's result is the next step after deployment.
+
+**QuickNode is the primary way the game reads the chain** (`server/chain/indexer.ts`):
+- **Streams:** the filter forwards the program's transaction logs. The webhook checks the HMAC, then decodes the Anchor events.
+- **RPC backfill:** `getSignaturesForAddress(program)` and `getTransaction`, from a saved cursor, fill any gap (for example while the Stream was paused).
+- **State:** `getTokenSupply` for both mints, plus a WebSocket `accountSubscribe` on the mints for live updates.
+- **Correctness:**
+  - events are de-duplicated by (signature, event index)
+  - failed transactions are skipped
+  - each event is provisional at *confirmed* and final at *finalized*
+  - every derived number keeps its source signatures for explorer links
+
+**Screens:**
+
+| Screen | Where | Shows |
+|---|---|---|
+| Economic Board | Ledger (L) | Gold, Might and USDC: supply, minted, burned, spent on upgrades and abilities, escrowed, rewards, yield records, top holders, 24 h flow chart, verification links |
+| Public profile | names on the board and in the Colosseum | battles, wins, losses and win rate by kind, Keep level, balances, realized yield, unit levels, abilities, recent battles and progression |
+| Colosseum scouting | answering a challenge | the challenger's public stats |
+| Warlord dossier | Intel (I) or Bag (B) | a rival's favourite orders and abilities, army mix, lane habits and how to beat them |
+
+- **Public stats** never include formations, orders or loadouts.
+- **Dossiers are relic-only:** you need a **Spyglass of the Watch**, an Information Relic that rare (20%), epic (35%) and legendary (50%) bosses drop.
+
 ## The yield economy (Treasury, T)
 
 Realized investment yield becomes **Might**, which unlocks class abilities. Might comes only from real investment results. Everything runs on **devnet test USDC: no real money**.

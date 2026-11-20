@@ -6,6 +6,7 @@ import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
 import { ago, currentSheet, esc, openSheet, toast } from "../ui.js";
 import { changeTag, oddsChart, plainOdds } from "../odds-chart.js";
+import { openDossiers } from "./economy.js";
 
 const oddsCache = new Map(); // market → { at, html }
 
@@ -83,6 +84,7 @@ function render(G) {
         .catch(() => (box.innerHTML = `<p class="note">No odds history for this market.</p>`));
     else box.querySelector("#intel-odds-open")?.addEventListener("click", () => G.openOdds(m));
   }
+  body.querySelector("#open-dossiers")?.addEventListener("click", () => openDossiers(G));
   for (const b of body.querySelectorAll("[data-open]"))
     b.addEventListener("click", () => {
       state.open = b.dataset.open;
@@ -121,6 +123,7 @@ function list() {
   return `
     <h2>Intelligence</h2>
     <p class="sub">Reports recovered from boss lairs. Each one is about a real market: one you've made a call on, a bounty you fought in, or an open market in that boss's realm. Harder bosses drop deeper reports.</p>
+    <div class="row" style="margin:6px 0"><button class="btn btn-gold btn-small" id="open-dossiers">${icon("eye", 1)} Warlord dossiers</button><span class="note">Spend a Spyglass of the Watch to read how a rival fights.</span></div>
     <div class="row spread" style="flex-wrap:wrap;gap:6px">
       <div class="chips">${chip("sort", "newest", "Newest", state.sort === "newest")}${chip("sort", "rarity", "Rarity", state.sort === "rarity")}${chip("sort", "category", "Category", state.sort === "category")}</div>
       <span class="note">${all.length} report${all.length === 1 ? "" : "s"} collected</span>

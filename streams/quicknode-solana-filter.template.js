@@ -9,6 +9,8 @@
 // Generate a copy with your addresses filled in: `npm run print-filter`.
 // Keeps only successful transactions that involve the game authority or a StakeClash badge mint,
 // and returns their game memos plus badge balance changes (mints, transfers between wallets).
+// Transactions that call the StakeClash program also return its log lines, from which the game
+// decodes the program's events (Gold, Might, stakes, abilities, battles).
 //
 // It also samples network activity: one block in every NETWORK_EVERY slots gets a small summary
 // (transaction counts, failure rate, busiest programs, watched-token transfers) for the game's
@@ -21,6 +23,7 @@ var WATCH_MINTS = __WATCH_MINTS__; // token mints whose transfers are counted in
 var DEPOSIT_MINT = "__DEPOSIT_MINT__"; // USDC: transfers into the authority's account are deposits
 var NETWORK_EVERY = __NETWORK_EVERY__; // sample one block in this many slots
 var VOTE_PROGRAM = "Vote111111111111111111111111111111111111111";
+var PROGRAM = "__PROGRAM__"; // the StakeClash on-chain program
 
 function keyOf(k) {
   return typeof k === "string" ? k : k && k.pubkey;
@@ -90,6 +93,7 @@ function main(stream) {
       if (!msg) continue;
       var keys = (msg.accountKeys || msg.staticAccountKeys || []).map(keyOf);
       var involved = keys.indexOf(AUTHORITY) >= 0;
+      var callsProgram = PROGRAM && keys.indexOf(PROGRAM) >= 0;
       var changes = {};
       var lists = [["pre", meta.preTokenBalances || []], ["post", meta.postTokenBalances || []]];
       for (var l = 0; l < lists.length; l++) {
@@ -131,7 +135,7 @@ function main(stream) {
           deposits.push({ from: from, amount: into, keys: keys.slice(0, 16) });
         }
       }
-      if (!involved && !badgeChanges.length && !deposits.length) continue;
+      if (!involved && !callsProgram && !badgeChanges.length && !deposits.length) continue;
       // Memo text shows up as `Memo (len N): "text"`, as its own log line, or (jsonParsed) as a
       // parsed spl-memo instruction, depending on the memo program version and encoding.
       var memos = [];
@@ -146,9 +150,17 @@ function main(stream) {
       }
       var ixs = msg.instructions || [];
       for (var x = 0; x < ixs.length; x++) if (ixs[x] && ixs[x].program === "spl-memo") addMemo(ixs[x].parsed);
-      if (!memos.length && !badgeChanges.length && !deposits.length) continue;
+      // program events: keep only the invoke/success/data lines the decoder needs
+      var programLogs = [];
+      if (callsProgram)
+        for (var pl = 0; pl < logs.length; pl++) {
+          var line = logs[pl];
+          if (line.indexOf("Program data: ") === 0 || / invoke \[\d+\]$/.test(line) || / (success|failed)/.test(line)) programLogs.push(line);
+        }
+      if (!memos.length && !badgeChanges.length && !deposits.length && !programLogs.length) continue;
       var ev = { signature: tx.transaction.signatures[0], slot: slot, blockTime: block.blockTime || null, memos: memos, badges: badgeChanges };
       if (deposits.length) ev.deposits = deposits;
+      if (programLogs.length) ev.programLogs = programLogs;
       events.push(ev);
     }
   }

@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import { ECONOMY } from "../shared/rules.js";
 import { db, feed, type Funds, type LedgerEntry, type Player } from "./db";
 import { GameError, award } from "./players";
+import * as chain from "./chain/onchain";
 import { getJson } from "./intel/http";
 
 export const MICRO = 1_000_000;
@@ -183,6 +184,7 @@ export function convert(p: Player, usdcIn: unknown, requestId: unknown) {
   f.cash -= amount;
   f.converted += amount;
   p.might = (p.might ?? 0) + might;
+  chain.onYieldConverted(p, amount, might);
   record(p, { kind: "convert", usdc: -amount, might });
   feed({ kind: "economy", text: `${p.name} turned ${(amount / MICRO).toFixed(2)} USDC of yield into ${might} Might`, player: p.id });
   return remember(p, requestId as string, { ok: true, might, funds: fundsView(p) });

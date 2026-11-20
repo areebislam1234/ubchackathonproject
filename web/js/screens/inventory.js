@@ -1,9 +1,10 @@
 // The Bag: everything bosses have dropped. Materials, training manuals, upgrade scrolls and relics.
-import { MATERIALS, MATERIAL_GOLD_VALUE, MATERIAL_KEYS, MATERIAL_MAX_SHARE, RELICS, UNITS, UNIT_KEYS } from "/shared/rules.js";
+import { MATERIALS, MATERIAL_GOLD_VALUE, MATERIAL_KEYS, MATERIAL_MAX_SHARE, INFO_RELIC, RELICS, UNITS, UNIT_KEYS } from "/shared/rules.js";
 import { api } from "../api.js";
 import { sfx } from "../audio.js";
 import { icon, spriteUrl } from "../gfx.js";
 import { act, esc, fmt, openSheet, toast } from "../ui.js";
+import { openDossiers } from "./economy.js";
 import { openFortress } from "./fortress.js";
 
 let picked = null; // the slot whose details are open
@@ -64,9 +65,12 @@ export function openInventory(G) {
     <div class="bag-grid">${scrolls}</div>
     <h3>Relics <span class="note">${owned.length}/${Object.keys(RELICS).length}</span></h3>
     <div class="bag-grid">${relics}</div>
+    <h3>Information Relics</h3>
+    <div class="row"><span class="bag-slot rare ${inv.spyglasses ? "" : "empty"}" title="${esc(INFO_RELIC.name)}">${icon("eye", 3)}${(inv.spyglasses ?? 0) > 1 ? `<span class="bag-n">${inv.spyglasses}</span>` : ""}</span><span class="note">${esc(INFO_RELIC.name)} ×${inv.spyglasses ?? 0}. ${esc(INFO_RELIC.desc)}</span><button class="btn btn-small btn-gold" id="bag-dossiers">Dossiers</button></div>
     <div id="bag-detail">${detail(G, inv)}</div>
   `,
   );
+  body.querySelector("#bag-dossiers")?.addEventListener("click", () => openDossiers(G));
   for (const b of body.querySelectorAll("[data-slot]"))
     b.addEventListener("click", () => {
       picked = picked === b.dataset.slot ? null : b.dataset.slot;

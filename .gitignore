@@ -4,3 +4,7 @@ node_modules/
 streams/quicknode-solana-filter.local.js
 *.log
 .DS_Store
+
+# Rust / Anchor build output
+target/
+.anchor/

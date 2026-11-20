@@ -33,6 +33,7 @@ export function setPlayer(p: Player, body: any) {
     for (const [k, v] of Object.entries(body.inventory.materials ?? {})) if (MATERIAL_KEYS.includes(k)) inv.materials[k] = clamp(v, 0, 9999);
     for (const [k, v] of Object.entries(body.inventory.manuals ?? {})) if (UNIT_KEYS.includes(k)) inv.manuals[k] = clamp(v, 0, 999);
     if (body.inventory.scrolls !== undefined) inv.scrolls = clamp(body.inventory.scrolls, 0, 999);
+    if (body.inventory.spyglasses !== undefined) inv.spyglasses = clamp(body.inventory.spyglasses, 0, 99);
     for (const id of body.inventory.relics ?? []) if (id in RELICS) inv.relics[id] ??= { at: Date.now(), from: "dev" };
   }
   db.save();

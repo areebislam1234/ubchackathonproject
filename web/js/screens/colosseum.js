@@ -9,6 +9,7 @@ import { icon, spriteUrl } from "../gfx.js";
 import { changeTag, oddsChart, plainOdds, sparkline } from "../odds-chart.js";
 import { act, ago, closeSheet, currentSheet, esc, fmt, openSheet, timeLeft, toast } from "../ui.js";
 import { openBattle } from "./battle.js";
+import { bindProfileLinks, scoutInto } from "./economy.js";
 
 let st = { tab: "board", data: null, markets: [], market: null, series: null, side: "yes", conf: 65, stake: 0, send: {}, answering: null, requestId: null };
 let timer = null;
@@ -83,7 +84,7 @@ function boardTab(G) {
       const mineOpen = x.challenger.playerId === G.me.id;
       const wait = x.botAt ? x.botAt - d.now : null;
       return `<div class="card duel-card">
-        <div class="row spread"><h4>${esc(x.challenger.name)}${mineOpen ? " (you)" : ""}</h4><span class="tag ${x.stake ? "featured" : ""}">${x.stake ? `${fmt(x.stake)} Might` : "For glory"}</span></div>
+        <div class="row spread"><h4>${mineOpen ? esc(x.challenger.name) : `<a href="#" data-profile="${esc(x.challenger.playerId)}">${esc(x.challenger.name)}</a>`}${mineOpen ? " (you)" : ""}</h4><span class="tag ${x.stake ? "featured" : ""}">${x.stake ? `${fmt(x.stake)} Might` : "For glory"}</span></div>
         <p class="duel-q">${esc(x.question)}</p>
         <p class="stats">Army power ${fmt(x.challenger.power)} · call sealed ${icon("lock", 1)} <span class="mono" title="SHA-256 commitment posted on Solana">${esc(x.challenger.commit.slice(0, 10))}…</span> ${receiptChip(x.challenger.receipt)}</p>
         ${
@@ -175,6 +176,7 @@ function answerForm(G) {
     <h3>${esc(x.challenger.name)} challenges you${x.stake ? ` for ${fmt(x.stake)} Might` : " for glory"}</h3>
     ${marketBlock(m)}
     <p class="note">Their call is sealed ${icon("lock", 1)} <span class="mono">${esc(x.challenger.commit.slice(0, 16))}…</span>, committed on Solana ${ago(x.challenger.committedAt)}. Their army: power ${fmt(x.challenger.power)}.</p>
+    <div class="scout" id="c-scout" data-player="${esc(x.challenger.playerId)}"><p class="note">Scouting ${esc(x.challenger.name)}…</p></div>
     <h3>Your call</h3>
     ${callControls(m)}
     <div class="coach">${potLine(x.stake)}</div>
@@ -344,6 +346,8 @@ function wire(G, body) {
       render(G);
     }),
   );
+  void scoutInto(body.querySelector("#c-scout"));
+  bindProfileLinks(G, body);
   body.querySelector("#c-accept")?.addEventListener("click", (e) =>
     act(e.currentTarget, async () => {
       const r = await api(`/api/colosseum/${st.answering}/accept`, { body: { units: st.send, side: st.side, confBps: st.conf * 100, requestId: st.requestId } });

@@ -18,7 +18,11 @@
     "print-filter": "tsx scripts/print-filter.ts",
     "settle": "tsx scripts/settle.ts",
     "world-preview": "tsx scripts/world-preview.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "battle-vectors": "tsx scripts/battle-vectors.ts",
+    "onchain-check": "tsx scripts/onchain-check.ts",
+    "program-keypair": "tsx scripts/program-keypair.ts",
+    "init-program": "tsx scripts/init-program.ts"
   },
   "dependencies": {
     "@fontsource/jersey-10": "^5.3.0",

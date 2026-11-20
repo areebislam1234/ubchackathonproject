@@ -2153,3 +2153,69 @@ label.field select {
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* ── Economic Board, public profiles, dossiers ─────────────────────── */
+.coach.warn {
+  border-color: var(--gold-d);
+}
+.flow {
+  margin: 10px 0 4px;
+}
+.flow svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--parch-d);
+  border: var(--px) solid var(--parch-dd);
+}
+.flow .axis {
+  stroke: var(--wood);
+  stroke-width: 1;
+}
+.flow rect.in {
+  fill: var(--green);
+}
+.flow rect.out {
+  fill: var(--red);
+}
+.flow figcaption {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--wood-d);
+}
+.src-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+  display: grid;
+  gap: 3px;
+  font-size: 14px;
+}
+.pub-card,
+.dossier-sheet {
+  padding: 10px;
+  margin: 8px 0;
+  background: var(--parch-d);
+  border: var(--px) solid var(--parch-dd);
+}
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  max-width: 360px;
+}
+.mini-grid span {
+  padding: 4px;
+  text-align: center;
+  font-size: 13px;
+  background: var(--parch);
+  border: 2px solid var(--parch-dd);
+}
+.mini-grid span.empty {
+  color: var(--parch-dd);
+}
+#dos-form input {
+  flex: 1;
+  min-width: 0;
+}

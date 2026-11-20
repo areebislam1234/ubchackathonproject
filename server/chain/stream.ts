@@ -5,6 +5,7 @@ import { db, feed, type ChainEvent, type NetworkSample } from "../db";
 import { badgeMints, MEMO_PREFIX } from "./solana";
 import { confirmWithdrawal, creditDeposit } from "../funds";
 import { applyDuelMemo } from "../colosseum";
+import { ingestTransaction } from "./indexer";
 
 export type StreamEvent = {
   signature: string;
@@ -13,6 +14,7 @@ export type StreamEvent = {
   memos: string[];
   badges: { mint: string; owner: string; pre: number; post: number }[];
   deposits?: { from: string | null; amount: number; keys: string[] }[]; // USDC into the game, in base units (micro-USDC)
+  programLogs?: string[]; // log lines of a StakeClash program transaction (its events)
 };
 
 /** Accepts the filter's output: { events: [...] }, a batch array of those, or a bare event list. */
@@ -68,6 +70,8 @@ export function applyEvents(events: StreamEvent[]) {
     chain.processed[e.signature] = Date.now();
     const rec: ChainEvent = { signature: e.signature, slot: e.slot, blockTime: e.blockTime, memos: e.memos, badges: e.badges, receivedAt: Date.now() };
     // USDC deposits: credited once, here, after the webhook's signature check and this dedupe
+    // StakeClash program events: decoded and indexed (the indexer de-duplicates per event too)
+    if (Array.isArray(e.programLogs) && e.programLogs.length) ingestTransaction(e.signature, e.slot, e.blockTime, e.programLogs.map(String));
     for (const d of e.deposits ?? []) if (d.amount > 0 && Number.isInteger(d.amount)) creditDeposit({ signature: e.signature, from: d.from ?? "", usdc: d.amount, refs: Array.isArray(d.keys) ? d.keys.map(String) : [] });
     chain.events.push(rec);
     applied++;

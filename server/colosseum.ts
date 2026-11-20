@@ -22,6 +22,9 @@ import { db, feed, type BattleRecord, type Duel, type DuelSide, type Player, typ
 import { oddsSeries, WINDOWS } from "./odds";
 import { attackFormation } from "./bounties";
 import { GameError, award, boostsOf, vigorOf } from "./players";
+import * as chain from "./chain/onchain";
+
+const potKeys = (d: Duel) => [`duel:${d.id}:c`, `duel:${d.id}:r`];
 
 const MEMO = "stakeclash:v1";
 const now = () => Date.now();
@@ -142,6 +145,7 @@ export async function issueChallenge(p: Player, body: any) {
   };
   d.challenger = sideFor(d, p, units, call, sidePriceBps(call.side, q.bid, q.ask));
   p.might = (p.might ?? 0) - stake; // held in escrow until the duel is fought or cancelled
+  chain.onStake(p, potKeys(d)[0], stake, `duel:${d.id}`);
   duels()[d.id] = d;
   feed({ kind: "duel", text: `${p.name} laid down a Colosseum challenge: ${stake ? `${stake} Might` : "for glory"} on “${d.question}”`, duel: d.id, player: p.id });
   db.save();
@@ -165,6 +169,7 @@ export async function acceptChallenge(p: Player, id: string, body: any) {
   if (d.status !== "open") throw new GameError("Someone already answered this challenge.");
   if (d.stake > (p.might ?? 0)) throw new GameError(`This duel needs ${d.stake} Might.`);
   p.might = (p.might ?? 0) - d.stake;
+  chain.onStake(p, potKeys(d)[1], d.stake, `duel:${d.id}`);
   d.rival = sideFor(d, p, units, call, sidePriceBps(call.side, q.bid, q.ask));
   postReceipt(d.rival.receipt!);
   const rec = fight(d);
@@ -178,6 +183,7 @@ export function cancelChallenge(p: Player, id: string) {
   if (d.status !== "open") throw new GameError("This duel has already been fought.");
   d.status = "cancelled";
   p.might = (p.might ?? 0) + d.stake;
+  chain.onRelease(potKeys(d)[0], p, d.stake, 0, `duel:${d.id}:cancel`);
   db.save();
   return { duel: duelView(d, p), might: p.might };
 }
@@ -218,6 +224,8 @@ function fight(d: Duel): BattleRecord {
   d.status = "fought";
   winner.payout = (winner.payout ?? 0) + split.steel;
   pay(winner.playerId, split.steel, "steel");
+  chain.releaseFromPot(potKeys(d), db.data.players[winner.playerId] ?? null, split.steel, split.burned, `duel:${d.id}:steel`);
+  chain.onBattle(rec, "duel");
   for (const s of [a, c]) {
     const pl = db.data.players[s.playerId];
     if (pl && !pl.bot) stats(pl).duels++;
@@ -255,11 +263,14 @@ export function settleDuel(d: Duel, outcome: "yes" | "no") {
     b.payout = (b.payout ?? 0) + (pot - half);
     pay(a.playerId, half, "foresight");
     pay(b.playerId, pot - half, "foresight");
+    chain.releaseFromPot(potKeys(d), db.data.players[a.playerId] ?? null, half, 0, `duel:${d.id}:foresight`);
+    chain.releaseFromPot(potKeys(d), db.data.players[b.playerId] ?? null, pot - half, 0, `duel:${d.id}:foresight`);
   } else {
     const w = a.brier < b.brier ? a : b;
     winner = w.playerId;
     w.payout = (w.payout ?? 0) + pot;
     pay(w.playerId, pot, "foresight");
+    chain.releaseFromPot(potKeys(d), db.data.players[w.playerId] ?? null, pot, 0, `duel:${d.id}:foresight`);
   }
   d.foresight = { winner, pot, outcome, at: now() };
   d.status = "settled";

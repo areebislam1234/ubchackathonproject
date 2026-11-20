@@ -17,6 +17,7 @@ import { openLair, refreshLairSheet } from "./screens/lair.js";
 import { openInventory, unseenCount } from "./screens/inventory.js";
 import { openIntel } from "./screens/intel.js";
 import { openTreasury } from "./screens/treasury.js";
+import { openDossiers, openEconomy, openPublicProfile } from "./screens/economy.js";
 import { openColosseum } from "./screens/colosseum.js";
 import { openOdds } from "./screens/odds.js";
 import { crierShout, initCrier } from "./crier.js";
@@ -38,6 +39,9 @@ export const G = {
   openBounty: (id) => openBounty(G, id),
   openLair: (id) => openLair(G, id),
   openIntel: (id) => openIntel(G, id),
+  openEconomy: (t) => openEconomy(G, t),
+  openPublicProfile: (id) => openPublicProfile(G, id),
+  openDossiers: () => openDossiers(G),
   openColosseum: (opts) => openColosseum(G, opts),
   openOdds: (market) => openOdds(G, market),
   travelTo,
@@ -506,6 +510,7 @@ $("btn-army").addEventListener("click", () => openArmy(G));
 $("btn-bag").addEventListener("click", () => openInventory(G));
 $("btn-intel").addEventListener("click", () => openIntel(G));
 $("btn-bank").addEventListener("click", () => openTreasury(G));
+$("btn-ledger").addEventListener("click", () => openEconomy(G));
 $("res-usdc").addEventListener("click", () => openTreasury(G, "overview"));
 $("res-might").addEventListener("click", () => openTreasury(G, "overview"));
 $("btn-profile").addEventListener("click", () => openProfile(G));
@@ -543,6 +548,7 @@ addEventListener("keydown", (e) => {
   if (k === "p") openProfile(G);
   if (k === "k") openColosseum(G);
   if (k === "o") openOdds(G);
+  if (k === "l") openEconomy(G);
 });
 
 // Pause walking while any overlay is up.

@@ -25,6 +25,7 @@ import { BOSSES } from "../shared/rules.js";
 import { GeminiClient, contractPricesBps, type MarketSummary } from "../gemini/client";
 import { env } from "./config";
 import { db, feed, type BattleRecord, type Bounty, type Entry, type Player } from "./db";
+import * as chain from "./chain/onchain";
 import { COMBAT_MS, GameError, addGold, award, boostsOf, exploredBytes, fieldFormation, newPlayer, relicFx, vigorOf } from "./players";
 
 export const world = generateWorld();
@@ -400,6 +401,7 @@ function fight(b: Bounty, atk: { id: string; name: string; units: Record<string,
   }
   const rec: BattleRecord = { id: `F-${++db.data.meta.battleSeq}`, engine: 2, bounty: b.id, at: now(), seed, attacker: { id: atk.id, name: atk.name, units: atk.units, levels: atk.levels, ...(atk.boosts ? { boosts: atk.boosts } : {}), ...(atk.vigor ? { vigor: atk.vigor } : {}), formation: atkFormation }, defender, result };
   db.data.battles[rec.id] = rec;
+  chain.onBattle(rec, "bounty");
   const verb = result.winner === "attacker" ? "crushed" : "was repelled by";
   feed({ kind: "battle", text: `${atk.name} ${verb} ${defender.name} in ${b.id} (+${result.score})`, bounty: b.id, player: atk.id });
   return rec;

@@ -5,6 +5,7 @@ import { mulberry32 } from "../shared/rng.js";
 import { BOSSES, BOSS_TIERS, RELICS, autoFormation, bossArmy, formationArmy, rollLoot } from "../shared/rules.js";
 import { FOG_CELL, FOG_W, REALMS, SIGHT } from "../shared/world.js";
 import { attackFormation, lairs } from "./bounties";
+import * as chain from "./chain/onchain";
 import { db, feed, type BattleRecord, type Player } from "./db";
 import { GameError, award, boostsOf, earnDrills, exploredBytes, inventory, vigorOf } from "./players";
 import { grantReport } from "./intel/reports";
@@ -131,6 +132,7 @@ export function challenge(p: Player, id: string, units: Record<string, number>, 
     result,
   };
   db.data.battles[rec.id] = rec;
+  chain.onBattle(rec, "boss");
   for (const [k, n] of Object.entries(result.lost)) p.army[k] = Math.max(0, (p.army[k] ?? 0) - (n as number));
   p.lastCombatAt = now();
   p.stats.battles++;
@@ -168,6 +170,10 @@ function grantLoot(p: Player, bossKey: string, seed: number, forceIntel: string 
     inv.relics[loot.relic] = { at: now(), from: bossKey };
     feed({ kind: "boss", text: `${p.name} claimed the ${(RELICS as any)[loot.relic].name} from ${boss.name}`, player: p.id });
     if (Object.keys(inv.relics).length >= 3) award(p, "relic-hunter");
+  }
+  if (loot.spyglass) {
+    inv.spyglasses = (inv.spyglasses ?? 0) + 1;
+    feed({ kind: "boss", text: `${p.name} found a Spyglass of the Watch on ${boss.name}`, player: p.id });
   }
   // the report is added to the collection now; its contents are fetched a moment later
   const report = loot.intel ? grantReport(p, bossKey, loot.intel.rarity as IntelRarity) : null;

@@ -21,6 +21,9 @@ setWithdrawSender(sendUsdc);
 import { badgeMints, chainStatus, claimAll, holdingsFor, linkWallet, loadAuthority, mintBadge, postReceipt, sealResults, unlinkWallet, verifyWalletSignature, walletChallenge } from "./chain/solana";
 import { applyEvents, applyNetwork, extractEvents, extractNetwork } from "./chain/stream";
 import { encodePng } from "./png";
+import { chainMode, queueStatus, startOnchain, state as onchainState } from "./chain/onchain";
+import { economyBoard, indexStatus, publicStats } from "./chain/indexer";
+import { dossierList, readDossier } from "./dossiers";
 
 // When a badge is earned with a wallet linked, mint it; results get sealed on-chain.
 onBadge((p, badge) => {
@@ -223,6 +226,16 @@ app.post(
   }),
 );
 app.post("/api/army/formation", auth, wrap((req) => (setFormation(req.player, req.body ?? {}), playerView(req.player))));
+// ── On-chain economy and public stats (from the QuickNode indexer) ──
+app.get("/api/economy", auth, wrap(() => ({ ...economyBoard(onchainState().mints), chain: queueStatus(), index: indexStatus() })));
+app.get("/api/players/:id/public", auth, wrap((req) => {
+  const p = db.data.players[String(req.params.id)];
+  if (!p) throw new GameError("No such warlord.", 404);
+  return publicStats(p);
+}));
+app.get("/api/chain/program", wrap(() => ({ ...chainMode(), queue: queueStatus(), index: indexStatus() })));
+app.get("/api/dossiers", auth, wrap((req) => dossierList(req.player)));
+app.post("/api/dossiers", auth, wrap((req) => readDossier(req.player, String(req.body?.target ?? ""))));
 app.post("/api/army/mastery", auth, wrap(() => {
   throw new GameError("Mastery became abilities: spend Might on class abilities instead (your old Mastery Might was refunded).");
 }));
@@ -468,6 +481,7 @@ app.use(express.static(path.join(ROOT, "web")));
 app.use("/api", (_req, res) => void res.status(404).json({ error: "not found" }));
 
 const refunded = refundMastery();
+startOnchain();
 if (refunded) console.log(`Mastery became abilities: refunded Might to ${refunded} player(s)`);
 app.listen(env.gamePort, () => {
   console.log(`StakeClash on http://localhost:${env.gamePort}  network=${NETWORK} gemini=${env.geminiMode}`);
